@@ -18,7 +18,6 @@ export default function HabitsGrid() {
   }
 
   const dates = getLastYearDates()
-  const dayHabits = getDayHabits(today)
 
   const getCellColor = (date: string) => {
     const habits = getDayHabits(date)

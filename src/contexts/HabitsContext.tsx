@@ -1,5 +1,4 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
-import { formatDate } from '../lib/utils'
 
 export interface NutritionMeal {
   meal: 'desayuno' | 'almuerzo' | 'merienda' | 'cena'

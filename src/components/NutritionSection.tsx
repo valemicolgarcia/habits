@@ -12,7 +12,6 @@ export default function NutritionSection({ onBack }: NutritionSectionProps) {
   const today = formatDate(new Date())
   const dayHabits = getDayHabits(today)
   const [meals, setMeals] = useState<NutritionMeal[]>(dayHabits.nutricion)
-  const [showModal, setShowModal] = useState(false)
 
   const score = getNutritionScore(today)
   const color = getNutritionColor(today)

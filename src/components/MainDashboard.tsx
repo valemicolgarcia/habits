@@ -23,7 +23,6 @@ export default function MainDashboard() {
     const [showAddHabitModal, setShowAddHabitModal] = useState(false)
     const [newHabitName, setNewHabitName] = useState('')
     const [newHabitEmoji, setNewHabitEmoji] = useState('')
-    const today = formatDate(new Date())
     const selectedDateStr = formatDate(selectedDate)
     const dayHabits = getDayHabits(selectedDateStr)
     const [estudioCompleted, setEstudioCompleted] = useState(dayHabits.estudio)

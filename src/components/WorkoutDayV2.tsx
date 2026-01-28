@@ -1,6 +1,6 @@
 import { useRoutineBlocks } from '../hooks/useRoutineBlocks'
 import { useWorkoutSessionV2 } from '../hooks/useWorkoutSessionV2'
-import { getDayName, getDayTypeName } from '../lib/utils'
+import { getDayName } from '../lib/utils'
 import type { DayOfWeek, DayType } from '../lib/types'
 import StrengthWorkout from './StrengthWorkout'
 import RunningWorkout from './RunningWorkout'

@@ -11,7 +11,6 @@ export default function MovementSection({ onBack }: { onBack: () => void }) {
   const { updateMovimiento } = useHabits()
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [showProfile, setShowProfile] = useState(false)
-  const today = formatDate(new Date())
   const selectedDateStr = formatDate(selectedDate)
   const dayOfWeek = getDayOfWeek(selectedDate)
   const routineForDay = routines.find((r) => r.day_of_week === dayOfWeek)

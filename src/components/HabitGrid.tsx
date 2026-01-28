@@ -8,7 +8,7 @@ interface HabitGridProps {
 }
 
 export default function HabitGrid({ habit, customHabit }: HabitGridProps) {
-  const { getDayHabits, getNutritionScore, getNutritionColor, updateCustomHabit, removeCustomHabit } = useHabits()
+  const { getDayHabits, getNutritionColor, updateCustomHabit, removeCustomHabit } = useHabits()
   const isCustomHabit = customHabit !== undefined
   const today = formatDate(new Date())
   const currentDate = new Date()
@@ -17,7 +17,6 @@ export default function HabitGrid({ habit, customHabit }: HabitGridProps) {
 
   // Obtener todos los días del mes actual
   const getDaysInMonth = () => {
-    const firstDay = new Date(year, month, 1)
     const lastDay = new Date(year, month + 1, 0)
     const days: string[] = []
 
@@ -30,113 +29,6 @@ export default function HabitGrid({ habit, customHabit }: HabitGridProps) {
   }
 
   const days = getDaysInMonth()
-
-  const getCellColor = (date: string) => {
-    const habits = getDayHabits(date)
-    const isToday = date === today
-    const isFuture = date > today // Días futuros no pueden tener color
-
-    // Si es un día futuro, siempre gris
-    if (isFuture) {
-      return isToday
-        ? 'bg-gray-200 dark:bg-gray-700 border-2 border-gray-400 dark:border-gray-500'
-        : 'bg-gray-200 dark:bg-gray-700'
-    }
-
-    // Hábito personalizado
-    if (isCustomHabit && customHabit) {
-      const completed = habits.customHabits?.[customHabit.id] || false
-      if (completed) {
-        // Mapeo de colores para hábitos personalizados con variantes dark
-        const colorMap: Record<string, { light: string; dark: string }> = {
-          'pink-300': { light: 'bg-pink-300', dark: 'bg-pink-600' },
-          'rose-400': { light: 'bg-rose-400', dark: 'bg-rose-600' },
-          'fuchsia-400': { light: 'bg-fuchsia-400', dark: 'bg-fuchsia-600' },
-          'purple-400': { light: 'bg-purple-400', dark: 'bg-purple-600' },
-          'indigo-400': { light: 'bg-indigo-400', dark: 'bg-indigo-600' },
-          'sky-400': { light: 'bg-sky-400', dark: 'bg-sky-600' },
-          'cyan-400': { light: 'bg-cyan-400', dark: 'bg-cyan-600' },
-          'teal-400': { light: 'bg-teal-400', dark: 'bg-teal-600' },
-          'emerald-400': { light: 'bg-emerald-400', dark: 'bg-emerald-600' },
-          'lime-400': { light: 'bg-lime-400', dark: 'bg-lime-600' },
-          'amber-400': { light: 'bg-amber-400', dark: 'bg-amber-600' },
-          'orange-300': { light: 'bg-orange-300', dark: 'bg-orange-600' },
-          'red-400': { light: 'bg-red-400', dark: 'bg-red-600' },
-          'slate-400': { light: 'bg-slate-400', dark: 'bg-slate-600' },
-          'zinc-400': { light: 'bg-zinc-400', dark: 'bg-zinc-600' },
-          'stone-400': { light: 'bg-stone-400', dark: 'bg-stone-600' },
-        }
-        const colorConfig = colorMap[customHabit.color || 'emerald-500'] || { light: 'bg-emerald-500', dark: 'bg-emerald-600' }
-        const colorClass = `${colorConfig.light} dark:${colorConfig.dark}`
-        return isToday
-          ? `${colorClass} border-2 border-gray-700 dark:border-gray-300`
-          : colorClass
-      }
-      return isToday
-        ? 'bg-gray-200 dark:bg-gray-700 border-2 border-gray-400 dark:border-gray-500'
-        : 'bg-gray-200 dark:bg-gray-700'
-    }
-
-    if (habit === 'nutricion') {
-      const color = getNutritionColor(date)
-
-      if (habits.nutricion.length !== 4) {
-        return isToday
-          ? 'bg-gray-200 dark:bg-gray-700 border-2 border-gray-400 dark:border-gray-500'
-          : 'bg-gray-200 dark:bg-gray-700'
-      }
-
-      let colorClass = ''
-      if (color === 'green') colorClass = 'bg-green-500 dark:bg-green-600'
-      else if (color === 'yellow') colorClass = 'bg-yellow-500 dark:bg-yellow-600'
-      else if (color === 'orange') colorClass = 'bg-orange-500 dark:bg-orange-600'
-      else if (color === 'purple') colorClass = 'bg-purple-500 dark:bg-purple-600'
-      else colorClass = 'bg-red-500 dark:bg-red-600'
-
-      return isToday
-        ? `${colorClass} border-2 border-gray-700 dark:border-gray-300`
-        : colorClass
-    }
-
-    if (habit === 'movimiento') {
-      // Siempre mostrar verde cuando está marcado, sin importar si es manual o rutina completada
-      if (habits.movimiento) {
-        const colorClass = 'bg-green-500 dark:bg-green-600'
-        return isToday
-          ? `${colorClass} border-2 border-gray-700 dark:border-gray-300`
-          : colorClass
-      }
-      return isToday
-        ? 'bg-gray-200 dark:bg-gray-700 border-2 border-gray-400 dark:border-gray-500'
-        : 'bg-gray-200 dark:bg-gray-700'
-    }
-
-    if (habit === 'lectura') {
-      if (habits.lectura) {
-        const colorClass = 'bg-pink-300 dark:bg-pink-500' // Rosa pastel
-        return isToday
-          ? `${colorClass} border-2 border-gray-700 dark:border-gray-300`
-          : colorClass
-      }
-      return isToday
-        ? 'bg-gray-200 dark:bg-gray-700 border-2 border-gray-400 dark:border-gray-500'
-        : 'bg-gray-200 dark:bg-gray-700'
-    }
-
-    if (habit === 'estudio') {
-      if (habits.estudio) {
-        const colorClass = 'bg-cyan-300 dark:bg-cyan-500' // Celeste
-        return isToday
-          ? `${colorClass} border-2 border-gray-700 dark:border-gray-300`
-          : colorClass
-      }
-      return isToday
-        ? 'bg-gray-200 dark:bg-gray-700 border-2 border-gray-400 dark:border-gray-500'
-        : 'bg-gray-200 dark:bg-gray-700'
-    }
-
-    return 'bg-gray-200 dark:bg-gray-700'
-  }
 
   const getHabitName = () => {
     if (isCustomHabit && customHabit) {
