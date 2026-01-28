@@ -47,8 +47,6 @@ export function HabitsProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth()
   const [habits, setHabits] = useState<Record<string, DayHabits>>({})
   const [customHabitDefinitions, setCustomHabitDefinitions] = useState<CustomHabitDefinition[]>([])
-  const [loading, setLoading] = useState(true)
-  const [syncing, setSyncing] = useState(false)
 
   // Cargar datos desde Supabase cuando el usuario inicie sesión
   useEffect(() => {
@@ -64,7 +62,6 @@ export function HabitsProvider({ children }: { children: ReactNode }) {
       if (savedDefinitions) {
         setCustomHabitDefinitions(JSON.parse(savedDefinitions))
       }
-      setLoading(false)
     }
   }, [user])
 
@@ -83,8 +80,6 @@ export function HabitsProvider({ children }: { children: ReactNode }) {
     if (!user) return
 
     try {
-      setLoading(true)
-      
       // Cargar day_habits
       const { data: habitsData, error: habitsError } = await supabase
         .from('day_habits')
@@ -151,76 +146,8 @@ export function HabitsProvider({ children }: { children: ReactNode }) {
       if (savedDefinitions) {
         setCustomHabitDefinitions(JSON.parse(savedDefinitions))
       }
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  // Guardar hábitos en Supabase
-  const saveToSupabase = async () => {
-    if (!user || syncing) return
-
-    try {
-      setSyncing(true)
-      
-      // Guardar cada día de hábitos
-      for (const [date, dayHabits] of Object.entries(habits)) {
-        const { error } = await supabase
-          .from('day_habits')
-          .upsert({
-            user_id: user.id,
-            date: date,
-            movimiento: dayHabits.movimiento || false,
-            movimiento_rutina_completada: dayHabits.movimientoRutinaCompletada || false,
-            estudio: dayHabits.estudio || false,
-            lectura: dayHabits.lectura || false,
-            nutricion: dayHabits.nutricion || [],
-            nutricion_permitido: dayHabits.nutricionPermitido || false,
-            custom_habits: dayHabits.customHabits || {},
-          }, {
-            onConflict: 'user_id,date'
-          })
-
-        if (error) {
-          console.error(`Error saving day_habits for ${date}:`, error)
-        }
-      }
     } catch (error) {
-      console.error('Error saving habits to Supabase:', error)
-    } finally {
-      setSyncing(false)
-    }
-  }
-
-  // Guardar definiciones de hábitos personalizados en Supabase
-  const saveCustomHabitDefinitionsToSupabase = async () => {
-    if (!user || syncing) return
-
-    try {
-      setSyncing(true)
-      
-      // Guardar cada definición
-      for (const definition of customHabitDefinitions) {
-        const { error } = await supabase
-          .from('custom_habit_definitions')
-          .upsert({
-            user_id: user.id,
-            habit_id: definition.id,
-            name: definition.name,
-            emoji: definition.emoji || null,
-            color: definition.color || null,
-          }, {
-            onConflict: 'user_id,habit_id'
-          })
-
-        if (error) {
-          console.error(`Error saving custom habit definition ${definition.id}:`, error)
-        }
-      }
-    } catch (error) {
-      console.error('Error saving custom habit definitions to Supabase:', error)
-    } finally {
-      setSyncing(false)
+      console.error('Error loading habits from Supabase:', error)
     }
   }
 
