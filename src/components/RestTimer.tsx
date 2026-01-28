@@ -74,19 +74,19 @@ export default function RestTimer({ restSeconds, onComplete }: RestTimerProps) {
   const progress = restSeconds > 0 ? ((restSeconds - seconds) / restSeconds) * 100 : 0
 
   return (
-    <div className="bg-orange-50 rounded-lg p-4 border-2 border-orange-200">
-      <div className="flex items-center justify-between mb-3">
+    <div className="bg-orange-50 dark:bg-orange-900/20 rounded-lg p-2 sm:p-3 border-2 border-orange-200 dark:border-orange-800">
+      <div className="flex items-center justify-between mb-2 sm:mb-2">
         <div>
-          <div className="text-sm text-gray-600 mb-1">Descanso: {formatTime(restSeconds)}</div>
-          <div className={`text-2xl font-bold ${seconds === 0 ? 'text-green-600' : 'text-orange-600'}`}>
+          <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-0.5 sm:mb-1">Descanso: {formatTime(restSeconds)}</div>
+          <div className={`text-lg sm:text-xl font-bold ${seconds === 0 ? 'text-green-600 dark:text-green-400' : 'text-orange-600 dark:text-orange-400'}`}>
             {formatTime(seconds)}
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-1 sm:gap-2 flex-wrap">
           {!isRunning && seconds === restSeconds && (
             <button
               onClick={handleStart}
-              className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 font-medium"
+              className="px-2 sm:px-3 py-1 sm:py-1.5 bg-orange-600 dark:bg-orange-500 text-white rounded text-xs sm:text-sm hover:bg-orange-700 dark:hover:bg-orange-600 font-medium"
             >
               Iniciar
             </button>
@@ -94,7 +94,7 @@ export default function RestTimer({ restSeconds, onComplete }: RestTimerProps) {
           {isRunning && !isPaused && (
             <button
               onClick={handlePause}
-              className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 font-medium"
+              className="px-2 sm:px-3 py-1 sm:py-1.5 bg-yellow-600 dark:bg-yellow-500 text-white rounded text-xs sm:text-sm hover:bg-yellow-700 dark:hover:bg-yellow-600 font-medium"
             >
               Pausar
             </button>
@@ -102,7 +102,7 @@ export default function RestTimer({ restSeconds, onComplete }: RestTimerProps) {
           {isPaused && (
             <button
               onClick={handleResume}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium"
+              className="px-2 sm:px-3 py-1 sm:py-1.5 bg-green-600 dark:bg-green-500 text-white rounded text-xs sm:text-sm hover:bg-green-700 dark:hover:bg-green-600 font-medium"
             >
               Continuar
             </button>
@@ -110,21 +110,21 @@ export default function RestTimer({ restSeconds, onComplete }: RestTimerProps) {
           {seconds < restSeconds && (
             <button
               onClick={handleReset}
-              className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 font-medium"
+              className="px-2 sm:px-3 py-1 sm:py-1.5 bg-gray-600 dark:bg-gray-500 text-white rounded text-xs sm:text-sm hover:bg-gray-700 dark:hover:bg-gray-600 font-medium"
             >
               Reiniciar
             </button>
           )}
         </div>
       </div>
-      <div className="w-full bg-gray-200 rounded-full h-2">
+      <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 sm:h-2">
         <div
-          className="bg-orange-600 h-2 rounded-full transition-all duration-300"
+          className="bg-orange-600 dark:bg-orange-500 h-1.5 sm:h-2 rounded-full transition-all duration-300"
           style={{ width: `${Math.min(progress, 100)}%` }}
         />
       </div>
       {seconds === 0 && (
-        <div className="mt-2 text-center text-green-600 font-semibold">
+        <div className="mt-1.5 sm:mt-2 text-center text-green-600 dark:text-green-400 font-semibold text-xs sm:text-sm">
           ¡Descanso completado!
         </div>
       )}

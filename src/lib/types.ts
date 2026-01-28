@@ -87,6 +87,16 @@ export interface AerobicLog {
   created_at?: string
 }
 
+export interface ExerciseNote {
+  id: string
+  session_id: string
+  block_id: string
+  exercise_name: string
+  note: string
+  created_at?: string
+  updated_at?: string
+}
+
 // Tipos para la UI
 export interface DayConfig {
   dayOfWeek: DayOfWeek
@@ -117,4 +127,8 @@ export interface ExerciseData {
 export interface BlockData {
   blockId: string
   exercises: ExerciseData[]
+}
+
+export interface ExerciseDataWithNote extends ExerciseData {
+  note?: string
 }

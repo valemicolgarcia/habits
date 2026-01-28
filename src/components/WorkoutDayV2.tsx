@@ -28,10 +28,10 @@ export default function WorkoutDayV2({
     return (
       <div className="min-h-screen p-4">
         <div className="max-w-2xl mx-auto">
-          <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-8 text-center">
             <div className="text-6xl mb-4">😴</div>
-            <h2 className="text-2xl font-bold text-gray-800 mb-2">Día de Descanso</h2>
-            <p className="text-gray-600">
+            <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100 mb-2">Día de Descanso</h2>
+            <p className="text-gray-600 dark:text-gray-400">
               Hoy ({getDayName(dayOfWeek)}) es tu día de descanso. ¡Disfruta y recupérate!
             </p>
           </div>
@@ -43,7 +43,7 @@ export default function WorkoutDayV2({
   if (blocksLoading || sessionLoading) {
     return (
       <div className="flex justify-center items-center min-h-screen">
-        <div className="text-gray-600">Cargando...</div>
+        <div className="text-gray-600 dark:text-gray-400">Cargando...</div>
       </div>
     )
   }
@@ -52,11 +52,11 @@ export default function WorkoutDayV2({
     <div className="min-h-screen p-4 pb-20">
       <div className="max-w-2xl mx-auto">
         {/* Header */}
-        <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
-          <h1 className="text-2xl font-bold text-gray-800 mb-2">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 mb-6">
+          <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100 mb-2">
             {getDayName(dayOfWeek)} - {getDayTypeName(dayType)}
           </h1>
-          <p className="text-gray-600 text-sm">
+          <p className="text-gray-600 dark:text-gray-400 text-sm">
             {date.toLocaleDateString('es-ES', {
               year: 'numeric',
               month: 'long',
@@ -66,7 +66,7 @@ export default function WorkoutDayV2({
         </div>
 
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-4 py-3 rounded-lg mb-4">
             {error}
           </div>
         )}

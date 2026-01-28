@@ -6,8 +6,10 @@ import type { DayOfWeek } from '../lib/types'
 interface PreviousWeekExerciseData {
   exerciseName: string
   weight: number
-  reps: number
+  reps: number // Promedio o total
+  repsArray?: number[] // Array de reps por serie para mostrar formato "12-12-12-12"
   timeSeconds: number
+  note?: string
 }
 
 export function usePreviousWeekData(
@@ -37,6 +39,8 @@ export function usePreviousWeekData(
       }
 
       // Calcular fecha de la semana anterior (mismo día de la semana, 7 días antes)
+      // Ejemplo: Si currentDate es miércoles 4 de febrero, previousWeekDate será miércoles 28 de enero
+      // Esto asegura que siempre se muestren los datos del mismo día de la semana de la semana anterior
       const previousWeekDate = new Date(currentDate)
       previousWeekDate.setDate(previousWeekDate.getDate() - 7)
       const previousWeekDateString = formatDate(previousWeekDate)
@@ -80,6 +84,23 @@ export function usePreviousWeekData(
         return
       }
 
+      // Obtener notas de ejercicio de la semana anterior
+      const { data: exerciseNotes, error: notesError } = await supabase
+        .from('exercise_notes')
+        .select('*')
+        .eq('session_id', previousSession.id)
+        .in('exercise_name', exerciseNames)
+
+      if (notesError) {
+        console.error('Error loading previous week notes:', notesError)
+      }
+
+      // Crear mapa de notas por ejercicio
+      const notesMap: Record<string, string> = {}
+      exerciseNotes?.forEach((note) => {
+        notesMap[note.exercise_name] = note.note
+      })
+
       // Agrupar por ejercicio y obtener el peso y reps más comunes o el promedio
       const exerciseData: Record<string, PreviousWeekExerciseData> = {}
 
@@ -91,9 +112,10 @@ export function usePreviousWeekData(
           const weights = exerciseLogs.map((log) => log.weight)
           const maxWeight = Math.max(...weights)
 
-          // Obtener las reps más comunes (o el promedio)
-          const reps = exerciseLogs.map((log) => log.reps)
-          const avgReps = Math.round(reps.reduce((sum, r) => sum + r, 0) / reps.length)
+          // Obtener las reps ordenadas por número de serie para mostrar formato "12-12-12-12"
+          const sortedLogs = [...exerciseLogs].sort((a, b) => a.set_number - b.set_number)
+          const repsArray = sortedLogs.map((log) => log.reps)
+          const avgReps = Math.round(repsArray.reduce((sum, r) => sum + r, 0) / repsArray.length)
 
           // Obtener el tiempo promedio (si existe)
           const timeSeconds = exerciseLogs
@@ -108,7 +130,9 @@ export function usePreviousWeekData(
             exerciseName,
             weight: maxWeight,
             reps: avgReps,
+            repsArray,
             timeSeconds: avgTimeSeconds,
+            note: notesMap[exerciseName],
           }
         } else {
           exerciseData[exerciseName] = {
@@ -116,6 +140,7 @@ export function usePreviousWeekData(
             weight: 0,
             reps: 0,
             timeSeconds: 0,
+            note: notesMap[exerciseName],
           }
         }
       })

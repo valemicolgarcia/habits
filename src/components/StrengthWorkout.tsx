@@ -23,6 +23,7 @@ interface SetData {
 interface ExerciseData {
   weight: number // Peso único para todas las series
   sets: SetData[] // Array de sets, cada uno con sus propias reps
+  note?: string // Nota del ejercicio
 }
 
 export default function StrengthWorkout({
@@ -82,9 +83,15 @@ export default function StrengthWorkout({
               }
             })
 
+          // Obtener nota del ejercicio
+          const exerciseNote = session.exerciseNotes?.find(
+            (note: any) => note.block_id === block.id && note.exercise_name === exercise.name
+          )
+
           data[`${block.id}-${exercise.name}`] = {
             weight,
             sets,
+            note: exerciseNote?.note || '',
           }
         })
       })
@@ -103,6 +110,7 @@ export default function StrengthWorkout({
               timeSeconds: 0,
               completed: false,
             })),
+            note: '',
           }
         })
       })
@@ -169,6 +177,20 @@ export default function StrengthWorkout({
     })
   }
 
+  const handleNoteChange = (blockId: string, exerciseName: string, note: string) => {
+    setExerciseData((prev) => {
+      const newData = { ...prev }
+      const key = `${blockId}-${exerciseName}`
+      if (newData[key]) {
+        newData[key] = {
+          ...newData[key],
+          note,
+        }
+      }
+      return newData
+    })
+  }
+
   const handleSave = async () => {
     setSaving(true)
     try {
@@ -177,7 +199,7 @@ export default function StrengthWorkout({
         blockId: block.id,
         exercises: block.exercises.map((exercise) => {
           const key = `${block.id}-${exercise.name}`
-          const data = exerciseData[key] || { weight: 0, sets: [] }
+          const data = exerciseData[key] || { weight: 0, sets: [], note: '' }
 
           // Crear sets solo para las series completadas, usando el peso único
           const sets = data.sets
@@ -191,6 +213,7 @@ export default function StrengthWorkout({
           return {
             exerciseName: exercise.name,
             sets: sets.length > 0 ? sets : [],
+            note: data.note || '',
           } as any
         }),
       }))
@@ -206,8 +229,8 @@ export default function StrengthWorkout({
 
   if (blocks.length === 0) {
     return (
-      <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
-        <p className="text-gray-600">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-8 text-center">
+        <p className="text-gray-600 dark:text-gray-400">
           No hay ejercicios configurados para este día. Ve a "Mi Rutina" para configurarlos.
         </p>
       </div>
@@ -215,31 +238,31 @@ export default function StrengthWorkout({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Bloques de ejercicios */}
       {blocks.map((block) => {
         return (
-          <div key={block.id} className="bg-white rounded-xl shadow-lg p-5">
-            <div className="mb-4">
-              <h3 className="text-lg font-bold text-gray-800">
+          <div key={block.id} className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-3 sm:p-4">
+            <div className="mb-3">
+              <h3 className="text-base sm:text-lg font-bold text-gray-800 dark:text-gray-100">
                 Bloque {block.order_index + 1}
               </h3>
-              <p className="text-sm text-gray-600 mb-3">
-                Descanso entre series: {block.rest_seconds} segundos
+              <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-2">
+                Descanso: {block.rest_seconds}s
               </p>
               {block.notes && (
-                <div className="mt-2 p-3 bg-blue-50 border-l-4 border-blue-400 rounded text-sm text-gray-700">
-                  <span className="font-medium text-blue-700">Nota: </span>
+                <div className="mt-1 p-2 bg-blue-50 dark:bg-blue-900/20 border-l-2 border-blue-400 dark:border-blue-500 rounded text-xs text-gray-700 dark:text-gray-300">
+                  <span className="font-medium text-blue-700 dark:text-blue-400">Nota: </span>
                   {block.notes}
                 </div>
               )}
               {/* Temporizador de descanso */}
-              <div className="mt-3">
+              <div className="mt-2">
                 <RestTimer restSeconds={block.rest_seconds} />
               </div>
             </div>
 
-            <div className="space-y-6">
+            <div className="space-y-4">
               {block.exercises.map((exercise) => {
                 const key = `${block.id}-${exercise.name}`
                 const data = exerciseData[key] || {
@@ -249,42 +272,43 @@ export default function StrengthWorkout({
                     timeSeconds: 0,
                     completed: false,
                   })),
+                  note: '',
                 }
                 const previousWeek = previousData[exercise.name]
                 const isTimeBased = exercise.measurement_type === 'time'
 
                 return (
-                  <div key={exercise.id} className="border-t border-gray-200 pt-4">
+                  <div key={exercise.id} className="border-t border-gray-200 dark:border-gray-700 pt-3">
                     {/* Información del ejercicio */}
-                    <div className="mb-4">
-                      <div className="flex justify-between items-start mb-3">
-                        <h4 className="font-semibold text-gray-800 text-lg">
+                    <div className="mb-3">
+                      <div className="flex justify-between items-start mb-2">
+                        <h4 className="font-semibold text-gray-800 dark:text-gray-100 text-sm sm:text-base">
                           {exercise.name}
                         </h4>
                         <button
                           onClick={() =>
                             setSelectedExerciseForProgress({ name: exercise.name, blockId: block.id })
                           }
-                          className="px-3 py-1.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm font-medium"
+                          className="px-2 py-1 bg-purple-600 dark:bg-purple-500 text-white rounded text-xs sm:text-sm font-medium hover:bg-purple-700 dark:hover:bg-purple-600"
                         >
                           Progreso
                         </button>
                       </div>
                       
                       {/* Información objetivo y semana anterior */}
-                      <div className="bg-gray-50 rounded-lg p-3 mb-3">
-                        <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div className="bg-gray-50 dark:bg-gray-700/50 rounded p-2 mb-2">
+                        <div className="grid grid-cols-2 gap-2 text-xs sm:text-sm">
                           <div>
-                            <span className="text-gray-600 block mb-1">Series objetivo:</span>
-                            <span className="font-semibold text-gray-800">
+                            <span className="text-gray-600 dark:text-gray-400 block mb-0.5">Series objetivo:</span>
+                            <span className="font-semibold text-gray-800 dark:text-gray-100">
                               {exercise.target_sets}
                             </span>
                           </div>
                           <div>
-                            <span className="text-gray-600 block mb-1">
+                            <span className="text-gray-600 dark:text-gray-400 block mb-0.5">
                               {isTimeBased ? 'Tiempo objetivo:' : 'Reps objetivo:'}
                             </span>
-                            <span className="font-semibold text-gray-800">
+                            <span className="font-semibold text-gray-800 dark:text-gray-100">
                               {isTimeBased
                                 ? `${exercise.target_time_seconds || 0}s`
                                 : exercise.target_reps}
@@ -292,37 +316,50 @@ export default function StrengthWorkout({
                           </div>
                         </div>
                         
-                        {/* Datos de la semana anterior - siempre visible */}
-                        <div className="mt-3 pt-3 border-t border-gray-200">
-                          <div>
-                            <span className="text-gray-600 block mb-1 text-xs">
+                        {/* Datos de la semana anterior */}
+                        <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-600">
+                          <div className="mb-1">
+                            <span className="text-gray-600 dark:text-gray-400 block mb-0.5 text-xs">
                               Semana anterior:
                             </span>
                             {loadingPrevious ? (
-                              <span className="text-gray-400 text-sm">Cargando...</span>
+                              <span className="text-gray-400 dark:text-gray-500 text-xs">Cargando...</span>
                             ) : previousWeek && previousWeek.weight > 0 ? (
                               <div>
-                                <span className="font-bold text-blue-600 text-base">
+                                <span className="font-bold text-blue-600 dark:text-blue-400 text-sm">
                                   {previousWeek.weight} kg
                                 </span>
-                                <span className="text-gray-500 text-sm ml-2">
+                                <span className="text-gray-500 dark:text-gray-400 text-xs ml-1">
                                   ×{' '}
                                   {isTimeBased
                                     ? `${previousWeek.timeSeconds || 0}s`
-                                    : `${previousWeek.reps} reps`}
+                                    : previousWeek.repsArray && previousWeek.repsArray.length > 0
+                                    ? previousWeek.repsArray.join('-')
+                                    : previousWeek.reps}
                                 </span>
                               </div>
                             ) : (
-                              <span className="text-gray-400 text-sm">Sin datos previos</span>
+                              <span className="text-gray-400 dark:text-gray-500 text-xs">Sin datos previos</span>
                             )}
                           </div>
+                          {/* Nota de la semana anterior */}
+                          {previousWeek?.note && (
+                            <div className="mt-1 pt-1 border-t border-gray-200 dark:border-gray-600">
+                              <span className="text-gray-600 dark:text-gray-400 block mb-0.5 text-xs">
+                                Nota de la semana anterior:
+                              </span>
+                              <span className="text-gray-700 dark:text-gray-300 text-xs italic">
+                                {previousWeek.note}
+                              </span>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
 
                     {/* Temporizador si es tiempo */}
                     {isTimeBased && exercise.target_time_seconds && (
-                      <div className="mb-4">
+                      <div className="mb-2">
                         <Timer
                           targetSeconds={exercise.target_time_seconds}
                           initialSeconds={0}
@@ -334,9 +371,9 @@ export default function StrengthWorkout({
                     )}
 
                     {/* Input de peso único */}
-                    <div className="mb-4">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Peso usado (kg) - mismo para todas las series
+                    <div className="mb-2">
+                      <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Peso (kg) - mismo para todas las series
                       </label>
                       <input
                         type="number"
@@ -350,44 +387,54 @@ export default function StrengthWorkout({
                         }
                         min="0"
                         step="0.5"
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-lg"
+                        className="w-full px-2 py-1.5 sm:px-3 sm:py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm sm:text-base"
                         placeholder="0"
                       />
                     </div>
 
                     {/* Series con inputs de reps individuales */}
-                    <div className="space-y-3">
+                    <div className={`grid gap-2 ${
+                      data.sets.length === 1 
+                        ? 'grid-cols-1' 
+                        : data.sets.length === 2
+                        ? 'grid-cols-2'
+                        : data.sets.length === 3
+                        ? 'grid-cols-3'
+                        : data.sets.length === 4
+                        ? 'grid-cols-4'
+                        : 'grid-cols-2 sm:grid-cols-4'
+                    }`}>
                       {data.sets.map((set, setIndex) => (
                         <div
                           key={setIndex}
-                          className={`border rounded-lg p-3 ${
+                          className={`border rounded p-2 ${
                             set.completed
-                              ? 'bg-green-50 border-green-300'
-                              : 'bg-gray-50 border-gray-200'
+                              ? 'bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-700'
+                              : 'bg-gray-50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-600'
                           }`}
                         >
-                          <div className="flex items-center justify-between mb-2">
-                            <h5 className="font-semibold text-gray-800 text-sm">
+                          <div className="flex items-center justify-between mb-1.5">
+                            <h5 className="font-semibold text-gray-800 dark:text-gray-100 text-xs sm:text-sm">
                               Serie {setIndex + 1}
                             </h5>
-                            <label className="flex items-center space-x-2 cursor-pointer">
+                            <label className="flex items-center space-x-1 cursor-pointer">
                               <input
                                 type="checkbox"
                                 checked={set.completed}
                                 onChange={() => handleSetToggle(block.id, exercise.name, setIndex)}
-                                className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                                className="w-3 h-3 sm:w-4 sm:h-4 text-blue-600 dark:text-blue-400 rounded focus:ring-2 focus:ring-blue-500"
                               />
-                              <span className="text-xs font-medium text-gray-700">
-                                Completada
+                              <span className="text-xs font-medium text-gray-700 dark:text-gray-300 hidden sm:inline">
+                                ✓
                               </span>
                             </label>
                           </div>
 
-                          <div className="flex gap-3 items-end">
+                          <div className="flex gap-2 items-end">
                             {isTimeBased ? (
                               <div className="flex-1">
-                                <label className="block text-xs font-medium text-gray-700 mb-1">
-                                  Tiempo (segundos)
+                                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-0.5">
+                                  Tiempo (s)
                                 </label>
                                 <input
                                   type="number"
@@ -402,14 +449,14 @@ export default function StrengthWorkout({
                                     )
                                   }
                                   min="0"
-                                  className="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
+                                  className="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-xs sm:text-sm"
                                   placeholder="0"
                                 />
                               </div>
                             ) : (
                               <div className="flex-1">
-                                <label className="block text-xs font-medium text-gray-700 mb-1">
-                                  Repeticiones
+                                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-0.5">
+                                  Reps
                                 </label>
                                 <input
                                   type="number"
@@ -424,7 +471,7 @@ export default function StrengthWorkout({
                                     )
                                   }
                                   min="0"
-                                  className="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
+                                  className="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-xs sm:text-sm"
                                   placeholder="0"
                                 />
                               </div>
@@ -432,6 +479,20 @@ export default function StrengthWorkout({
                           </div>
                         </div>
                       ))}
+                    </div>
+
+                    {/* Campo de nota */}
+                    <div className="mt-3 pt-2 border-t border-gray-200 dark:border-gray-700">
+                      <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Nota (opcional):
+                      </label>
+                      <textarea
+                        value={data.note || ''}
+                        onChange={(e) => handleNoteChange(block.id, exercise.name, e.target.value)}
+                        rows={2}
+                        className="w-full px-2 py-1.5 sm:px-3 sm:py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-xs sm:text-sm resize-none"
+                        placeholder="Escribe una nota sobre este ejercicio..."
+                      />
                     </div>
                   </div>
                 )
@@ -442,15 +503,15 @@ export default function StrengthWorkout({
       })}
 
       {/* Checkbox de completado */}
-      <div className="bg-white rounded-2xl shadow-lg p-6">
-        <label className="flex items-center space-x-3 cursor-pointer">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-3 sm:p-4">
+        <label className="flex items-center space-x-2 cursor-pointer">
           <input
             type="checkbox"
             checked={completed}
             onChange={(e) => setCompleted(e.target.checked)}
-            className="w-6 h-6 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+            className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 dark:text-blue-400 rounded focus:ring-2 focus:ring-blue-500"
           />
-          <span className="text-lg font-semibold text-gray-800">
+          <span className="text-sm sm:text-base font-semibold text-gray-800 dark:text-gray-100">
             Entrenamiento realizado
           </span>
         </label>
@@ -460,7 +521,7 @@ export default function StrengthWorkout({
       <button
         onClick={handleSave}
         disabled={saving}
-        className="w-full bg-blue-600 text-white py-4 rounded-xl font-bold text-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
+        className="w-full bg-blue-600 dark:bg-blue-500 text-white py-2.5 sm:py-3 rounded-lg font-bold text-sm sm:text-base hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
       >
         {saving ? 'Guardando...' : 'Guardar Sesión'}
       </button>

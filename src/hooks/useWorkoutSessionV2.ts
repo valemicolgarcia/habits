@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { formatDate } from '../lib/utils'
-import type { WorkoutSession, DayType, BlockData, StrengthLog, RunningLog, AerobicLog } from '../lib/types'
+import type { WorkoutSession, DayType, BlockData, StrengthLog, RunningLog, AerobicLog, ExerciseNote } from '../lib/types'
 
 interface WorkoutSessionData extends WorkoutSession {
   strengthLogs?: StrengthLog[]
   runningLog?: RunningLog | null
   aerobicLog?: AerobicLog | null
+  exerciseNotes?: ExerciseNote[]
 }
 
 export function useWorkoutSessionV2(date: Date, dayType: DayType) {
@@ -56,6 +57,15 @@ export function useWorkoutSessionV2(date: Date, dayType: DayType) {
 
           if (strengthError) throw strengthError
           sessionWithLogs.strengthLogs = strengthLogs || []
+
+          // Cargar notas de ejercicio
+          const { data: exerciseNotes, error: notesError } = await supabase
+            .from('exercise_notes')
+            .select('*')
+            .eq('session_id', sessionData.id)
+
+          if (notesError) throw notesError
+          sessionWithLogs.exerciseNotes = exerciseNotes || []
         } else if (dayType === 'running') {
           const { data: runningLog, error: runningError } = await supabase
             .from('running_logs')
@@ -147,6 +157,47 @@ export function useWorkoutSessionV2(date: Date, dayType: DayType) {
 
               if (logError) throw logError
             }
+          }
+
+          // Guardar nota del ejercicio si existe
+          const exerciseWithNote = exercise as any
+          if (exerciseWithNote.note && exerciseWithNote.note.trim()) {
+            // Intentar actualizar nota existente o crear nueva
+            const { data: existingNote } = await supabase
+              .from('exercise_notes')
+              .select('id')
+              .eq('session_id', sessionId)
+              .eq('block_id', block.blockId)
+              .eq('exercise_name', exercise.exerciseName)
+              .maybeSingle()
+
+            if (existingNote) {
+              const { error: updateError } = await supabase
+                .from('exercise_notes')
+                .update({ note: exerciseWithNote.note.trim() })
+                .eq('id', existingNote.id)
+
+              if (updateError) throw updateError
+            } else {
+              const { error: insertError } = await supabase
+                .from('exercise_notes')
+                .insert({
+                  session_id: sessionId,
+                  block_id: block.blockId,
+                  exercise_name: exercise.exerciseName,
+                  note: exerciseWithNote.note.trim(),
+                })
+
+              if (insertError) throw insertError
+            }
+          } else {
+            // Eliminar nota si está vacía
+            await supabase
+              .from('exercise_notes')
+              .delete()
+              .eq('session_id', sessionId)
+              .eq('block_id', block.blockId)
+              .eq('exercise_name', exercise.exerciseName)
           }
         }
       }

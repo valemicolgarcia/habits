@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { useWeeklyRoutine } from '../hooks/useWeeklyRoutine'
+import { useTheme } from '../hooks/useTheme'
 import { formatDate, getDayOfWeek, getDayName } from '../lib/utils'
 import WorkoutDayV2 from './WorkoutDayV2'
 import Profile from './Profile'
@@ -8,6 +9,7 @@ import Profile from './Profile'
 export default function Dashboard() {
   const { user, signOut } = useAuth()
   const { routines, loading: routinesLoading, isComplete } = useWeeklyRoutine()
+  const { theme, toggleTheme } = useTheme()
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [showProfile, setShowProfile] = useState(false)
 
@@ -22,23 +24,46 @@ export default function Dashboard() {
   }
 
   const isToday = formatDate(selectedDate) === formatDate(new Date())
+  // Obtener el día de la semana (0-6) de la fecha seleccionada
+  // Esto permite que la rutina se repita semanalmente:
+  // - Miércoles 28 de enero (day_of_week = 3) → muestra rutina configurada para miércoles
+  // - Miércoles 4 de febrero (day_of_week = 3) → muestra la misma rutina configurada para miércoles
   const dayOfWeek = getDayOfWeek(selectedDate)
+  // Buscar la rutina configurada para este día de la semana
+  // La rutina se repite automáticamente cada semana
   const routineForDay = routines.find(r => r.day_of_week === dayOfWeek)
 
   // Mostrar perfil si el usuario lo solicita explícitamente
   if (showProfile) {
     return (
-      <div className="min-h-screen">
-        <header className="bg-white shadow-md sticky top-0 z-10">
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+        <header className="bg-white dark:bg-gray-800 shadow-md sticky top-0 z-10">
           <div className="max-w-4xl mx-auto px-4 py-4">
             <div className="flex justify-between items-center">
-              <h1 className="text-xl font-bold text-gray-800">Mi Rutina</h1>
-              <button
-                onClick={() => setShowProfile(false)}
-                className="text-sm text-blue-600 hover:text-blue-700 font-medium px-3 py-1 rounded-lg hover:bg-blue-50"
-              >
-                Volver al entrenamiento
-              </button>
+              <h1 className="text-xl font-bold text-gray-800 dark:text-gray-100">Mi Rutina</h1>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={toggleTheme}
+                  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                  aria-label="Cambiar tema"
+                >
+                  {theme === 'dark' ? (
+                    <svg className="w-5 h-5 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                    </svg>
+                  ) : (
+                    <svg className="w-5 h-5 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                    </svg>
+                  )}
+                </button>
+                <button
+                  onClick={() => setShowProfile(false)}
+                  className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium px-3 py-1 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/30"
+                >
+                  Volver al entrenamiento
+                </button>
+              </div>
             </div>
           </div>
         </header>
@@ -48,27 +73,42 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Header con navegación */}
-      <header className="bg-white shadow-md sticky top-0 z-10">
+      <header className="bg-white dark:bg-gray-800 shadow-md sticky top-0 z-10">
         <div className="max-w-2xl mx-auto px-4 py-4">
           <div className="flex justify-between items-center mb-4">
-            <h1 className="text-xl font-bold text-gray-800">Gym Tracker</h1>
+            <h1 className="text-xl font-bold text-gray-800 dark:text-gray-100">Gym Tracker</h1>
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setShowProfile(true)}
-                className="text-sm text-blue-600 hover:text-blue-700 font-medium px-3 py-1 rounded-lg hover:bg-blue-50"
+                className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium px-3 py-1 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/30"
               >
                 Mi Rutina
               </button>
-              <span className="text-sm text-gray-600 hidden sm:inline">
+              <button
+                onClick={toggleTheme}
+                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                aria-label="Cambiar tema"
+              >
+                {theme === 'dark' ? (
+                  <svg className="w-5 h-5 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                  </svg>
+                )}
+              </button>
+              <span className="text-sm text-gray-600 dark:text-gray-400 hidden sm:inline">
                 {user?.email}
               </span>
               <button
                 onClick={async () => {
                   await signOut()
                 }}
-                className="text-sm text-red-600 hover:text-red-700 font-medium px-3 py-1 rounded-lg hover:bg-red-50"
+                className="text-sm text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 font-medium px-3 py-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30"
               >
                 Salir
               </button>
@@ -102,8 +142,8 @@ export default function Dashboard() {
                 onClick={goToToday}
                 className={`px-4 py-2 rounded-lg font-semibold transition-colors ${
                   isToday
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    ? 'bg-blue-600 dark:bg-blue-500 text-white'
+                    : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
                 }`}
               >
                 {selectedDate.toLocaleDateString('es-ES', {
@@ -143,11 +183,11 @@ export default function Dashboard() {
       {/* Advertencia si la rutina no está completa */}
       {!routinesLoading && !isComplete() && (
         <div className="max-w-2xl mx-auto px-4 pt-4">
-          <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-lg shadow-sm">
+          <div className="bg-yellow-50 dark:bg-yellow-900/20 border-l-4 border-yellow-400 dark:border-yellow-500 p-4 rounded-lg shadow-sm">
             <div className="flex items-start">
               <div className="flex-shrink-0">
                 <svg
-                  className="h-5 w-5 text-yellow-400"
+                  className="h-5 w-5 text-yellow-400 dark:text-yellow-500"
                   fill="currentColor"
                   viewBox="0 0 20 20"
                 >
@@ -159,12 +199,12 @@ export default function Dashboard() {
                 </svg>
               </div>
               <div className="ml-3 flex-1">
-                <p className="text-sm text-yellow-700">
+                <p className="text-sm text-yellow-700 dark:text-yellow-300">
                   <span className="font-medium">Rutina incompleta:</span> Tienes días sin
                   configurar. Haz clic en{' '}
                   <button
                     onClick={() => setShowProfile(true)}
-                    className="font-semibold underline hover:text-yellow-800"
+                    className="font-semibold underline hover:text-yellow-800 dark:hover:text-yellow-200"
                   >
                     "Mi Rutina"
                   </button>{' '}
@@ -191,18 +231,18 @@ export default function Dashboard() {
           />
         ) : (
           <div className="min-h-screen flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-lg p-8 text-center max-w-md">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-8 text-center max-w-md">
               <div className="text-6xl mb-4">⚠️</div>
-              <h2 className="text-2xl font-bold text-gray-800 mb-2">
+              <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100 mb-2">
                 Rutina no configurada
               </h2>
-              <p className="text-gray-600 mb-6">
+              <p className="text-gray-600 dark:text-gray-400 mb-6">
                 No hay rutina configurada para {getDayName(dayOfWeek)}. Haz clic en "Mi Rutina"
                 para configurarla o editarla.
               </p>
               <button
                 onClick={() => setShowProfile(true)}
-                className="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700"
+                className="bg-blue-600 dark:bg-blue-500 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 dark:hover:bg-blue-600"
               >
                 Configurar Rutina
               </button>
