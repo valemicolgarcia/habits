@@ -1,7 +1,9 @@
 import { useAuth } from './hooks/useAuth'
 import { useTheme } from './hooks/useTheme'
+import { HabitsProvider } from './contexts/HabitsContext'
+import { UserProfileProvider } from './contexts/UserProfileContext'
 import Auth from './components/Auth'
-import Dashboard from './components/Dashboard'
+import MainDashboard from './components/MainDashboard'
 
 function App() {
   // Inicializar tema para aplicar clases desde el inicio
@@ -16,7 +18,15 @@ function App() {
     )
   }
 
-  return user ? <Dashboard /> : <Auth />
+  return user ? (
+    <HabitsProvider>
+      <UserProfileProvider>
+        <MainDashboard />
+      </UserProfileProvider>
+    </HabitsProvider>
+  ) : (
+    <Auth />
+  )
 }
 
 export default App

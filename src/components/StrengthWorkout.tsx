@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useWorkoutSessionV2 } from '../hooks/useWorkoutSessionV2'
 import { usePreviousWeekData } from '../hooks/usePreviousWeekData'
-import { getDayOfWeek } from '../lib/utils'
+import { useHabits } from '../contexts/HabitsContext'
+import { getDayOfWeek, formatDate } from '../lib/utils'
 import type { BlockWithExercises, DayType } from '../lib/types'
 import ExerciseProgress from './ExerciseProgress'
 import Timer from './Timer'
@@ -33,6 +34,7 @@ export default function StrengthWorkout({
   dayType,
 }: StrengthWorkoutProps) {
   const { saveStrengthSession } = useWorkoutSessionV2(date, dayType)
+  const { updateMovimiento, getDayHabits } = useHabits()
   const [exerciseData, setExerciseData] = useState<Record<string, ExerciseData>>({})
   const [completed, setCompleted] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -219,6 +221,15 @@ export default function StrengthWorkout({
       }))
 
       await saveStrengthSession(blockData, completed)
+      // Actualizar hábito de movimiento según el estado de completado
+      if (completed) {
+        updateMovimiento(formatDate(date), true, true) // Rutina completada
+      } else {
+        // Si se desmarca, eliminar el marcado de rutina completada
+        // pero mantener movimiento si existe (podría ser movimiento manual)
+        const dayHabits = getDayHabits(formatDate(date))
+        updateMovimiento(formatDate(date), dayHabits.movimiento, false)
+      }
       alert('¡Sesión guardada exitosamente!')
     } catch (err: any) {
       alert('Error al guardar: ' + err.message)

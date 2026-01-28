@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useWorkoutSessionV2 } from '../hooks/useWorkoutSessionV2'
+import { useHabits } from '../contexts/HabitsContext'
+import { formatDate } from '../lib/utils'
 import type { DayType } from '../lib/types'
 import RunningProgress from './RunningProgress'
 
@@ -11,6 +13,7 @@ interface RunningWorkoutProps {
 
 export default function RunningWorkout({ session, date, dayType }: RunningWorkoutProps) {
   const { saveRunningSession } = useWorkoutSessionV2(date, dayType)
+  const { updateMovimiento, getDayHabits } = useHabits()
   const [km, setKm] = useState(0)
   const [timeMinutes, setTimeMinutes] = useState(0)
   const [calories, setCalories] = useState<number | null>(null)
@@ -42,6 +45,15 @@ export default function RunningWorkout({ session, date, dayType }: RunningWorkou
     setSaving(true)
     try {
       await saveRunningSession(km, timeMinutes, calories, heartRateMin, heartRateMax, completed)
+      // Actualizar hábito de movimiento según el estado de completado
+      if (completed) {
+        updateMovimiento(formatDate(date), true, true) // Rutina completada
+      } else {
+        // Si se desmarca, eliminar el marcado de rutina completada
+        // pero mantener movimiento si existe (podría ser movimiento manual)
+        const dayHabits = getDayHabits(formatDate(date))
+        updateMovimiento(formatDate(date), dayHabits.movimiento, false)
+      }
       alert('¡Sesión guardada exitosamente!')
     } catch (err: any) {
       alert('Error al guardar: ' + err.message)
@@ -53,9 +65,9 @@ export default function RunningWorkout({ session, date, dayType }: RunningWorkou
   return (
     <div className="space-y-6">
       {/* Header con botón de progreso */}
-      <div className="bg-white rounded-2xl shadow-lg p-6">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold text-gray-800">Running</h2>
+          <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100">Running</h2>
           <button
             onClick={() => setShowProgress(true)}
             className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium"
@@ -65,9 +77,9 @@ export default function RunningWorkout({ session, date, dayType }: RunningWorkou
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-lg p-6 space-y-4">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 space-y-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             Kilómetros
           </label>
           <input
@@ -76,13 +88,13 @@ export default function RunningWorkout({ session, date, dayType }: RunningWorkou
             onChange={(e) => setKm(parseFloat(e.target.value) || 0)}
             min="0"
             step="0.1"
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+            className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
             placeholder="0"
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             Tiempo (minutos)
           </label>
           <input
@@ -90,14 +102,14 @@ export default function RunningWorkout({ session, date, dayType }: RunningWorkou
             value={timeMinutes || ''}
             onChange={(e) => setTimeMinutes(parseInt(e.target.value) || 0)}
             min="0"
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+            className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
             placeholder="0"
           />
         </div>
 
         <div className="grid grid-cols-3 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Calorías (opcional)
             </label>
             <input
@@ -107,12 +119,12 @@ export default function RunningWorkout({ session, date, dayType }: RunningWorkou
                 setCalories(e.target.value ? parseInt(e.target.value) : null)
               }
               min="0"
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+              className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
               placeholder="Opcional"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Ritmo cardíaco mínimo (bpm)
             </label>
             <input
@@ -122,12 +134,12 @@ export default function RunningWorkout({ session, date, dayType }: RunningWorkou
                 setHeartRateMin(e.target.value ? parseInt(e.target.value) : null)
               }
               min="0"
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+              className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
               placeholder="Opcional"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Ritmo cardíaco máximo (bpm)
             </label>
             <input
@@ -137,22 +149,22 @@ export default function RunningWorkout({ session, date, dayType }: RunningWorkou
                 setHeartRateMax(e.target.value ? parseInt(e.target.value) : null)
               }
               min="0"
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+              className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
               placeholder="Opcional"
             />
           </div>
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-lg p-6">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6">
         <label className="flex items-center space-x-3 cursor-pointer">
           <input
             type="checkbox"
             checked={completed}
             onChange={(e) => setCompleted(e.target.checked)}
-            className="w-6 h-6 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+            className="w-6 h-6 text-blue-600 dark:text-blue-400 rounded focus:ring-2 focus:ring-blue-500"
           />
-          <span className="text-lg font-semibold text-gray-800">
+          <span className="text-lg font-semibold text-gray-800 dark:text-gray-100">
             Entrenamiento realizado
           </span>
         </label>
@@ -161,7 +173,7 @@ export default function RunningWorkout({ session, date, dayType }: RunningWorkou
       <button
         onClick={handleSave}
         disabled={saving}
-        className="w-full bg-blue-600 text-white py-4 rounded-xl font-bold text-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
+        className="w-full bg-blue-600 dark:bg-blue-500 text-white py-4 rounded-xl font-bold text-lg hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
       >
         {saving ? 'Guardando...' : 'Guardar Sesión'}
       </button>

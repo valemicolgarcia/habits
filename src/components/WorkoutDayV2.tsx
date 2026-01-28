@@ -51,20 +51,6 @@ export default function WorkoutDayV2({
   return (
     <div className="min-h-screen p-4 pb-20">
       <div className="max-w-2xl mx-auto">
-        {/* Header */}
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 mb-6">
-          <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100 mb-2">
-            {getDayName(dayOfWeek)} - {getDayTypeName(dayType)}
-          </h1>
-          <p className="text-gray-600 dark:text-gray-400 text-sm">
-            {date.toLocaleDateString('es-ES', {
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric',
-            })}
-          </p>
-        </div>
-
         {error && (
           <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-4 py-3 rounded-lg mb-4">
             {error}
