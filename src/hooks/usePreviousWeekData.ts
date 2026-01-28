@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import { formatDate, getDayOfWeek } from '../lib/utils'
+import { formatDate } from '../lib/utils'
 import type { DayOfWeek } from '../lib/types'
 
 interface PreviousWeekExerciseData {

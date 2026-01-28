@@ -326,7 +326,7 @@ export default function StrengthWorkout({
                         <Timer
                           targetSeconds={exercise.target_time_seconds}
                           initialSeconds={0}
-                          onComplete={(seconds) => {
+                          onComplete={() => {
                             // El timer se puede usar para cada serie individual si es necesario
                           }}
                         />

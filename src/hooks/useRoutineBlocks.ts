@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import type { RoutineBlock, RoutineExercise, BlockWithExercises } from '../lib/types'
+import type { BlockWithExercises } from '../lib/types'
 
 export function useRoutineBlocks(routineDayId: string | null) {
   const [blocks, setBlocks] = useState<BlockWithExercises[]>([])

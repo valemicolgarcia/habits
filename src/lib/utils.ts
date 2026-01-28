@@ -2,10 +2,12 @@
  * Utilidades generales
  */
 
+import type { DayOfWeek } from './types'
+
 /**
  * Obtiene el nombre del día de la semana en español
  */
-export function getDayName(dayOfWeek: number): string {
+export function getDayName(dayOfWeek: DayOfWeek): string {
   const days = [
     'Domingo',
     'Lunes',
@@ -21,8 +23,8 @@ export function getDayName(dayOfWeek: number): string {
 /**
  * Obtiene el día de la semana (0-6) de una fecha
  */
-export function getDayOfWeek(date: Date): number {
-  return date.getDay() as 0 | 1 | 2 | 3 | 4 | 5 | 6
+export function getDayOfWeek(date: Date): DayOfWeek {
+  return date.getDay() as DayOfWeek
 }
 
 /**

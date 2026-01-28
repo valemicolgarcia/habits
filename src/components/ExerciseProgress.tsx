@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import { formatDate } from '../lib/utils'
 
 interface ExerciseProgressProps {
   exerciseName: string

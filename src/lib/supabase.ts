@@ -29,3 +29,20 @@ export type {
   ExerciseData,
   BlockData,
 } from './types'
+
+// Tipos legacy para compatibilidad con hooks antiguos
+export interface SetLog {
+  id: string
+  exercise_log_id: string
+  set_number: number
+  weight: number
+  reps: number
+  created_at?: string
+}
+
+export interface ExerciseLog {
+  id: string
+  session_id: string
+  exercise_name: string
+  created_at?: string
+}

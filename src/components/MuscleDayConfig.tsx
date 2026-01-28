@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
 import { useRoutineBlocks } from '../hooks/useRoutineBlocks'
-import type { BlockWithExercises } from '../lib/types'
 
 interface MuscleDayConfigProps {
   routineDayId: string
@@ -555,7 +554,8 @@ function BlockForm({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    onSubmit(restSeconds, notes.trim() || null)
+    const trimmedNotes = notes.trim() || undefined
+    onSubmit(restSeconds, trimmedNotes)
   }
 
   return (

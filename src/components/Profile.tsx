@@ -1,6 +1,5 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useWeeklyRoutine } from '../hooks/useWeeklyRoutine'
-import { useRoutineBlocks } from '../hooks/useRoutineBlocks'
 import { getDayName } from '../lib/utils'
 import type { DayOfWeek, DayType } from '../lib/types'
 import MuscleDayConfig from './MuscleDayConfig'

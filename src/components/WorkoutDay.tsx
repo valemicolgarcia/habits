@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { RoutineInfo, Exercise } from '../lib/routine'
+import { RoutineInfo } from '../lib/routine'
 import { useWorkoutSession } from '../hooks/useWorkoutSession'
 import ExerciseCard from './ExerciseCard'
 import ExerciseHistory from './ExerciseHistory'
