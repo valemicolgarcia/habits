@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { useHabits } from '../contexts/HabitsContext'
 import { useUserProfile } from '../contexts/UserProfileContext'
+import { useTheme } from '../hooks/useTheme'
 import { formatDate } from '../lib/utils'
-import { Home, Dumbbell, Apple, BookOpen, GraduationCap, User, LogOut, Menu, X, ChevronLeft, ChevronRight, Plus } from 'lucide-react'
+import { Home, Dumbbell, Apple, BookOpen, GraduationCap, User, LogOut, Menu, X, ChevronLeft, ChevronRight, Plus, Moon, Sun } from 'lucide-react'
 import UserProfile from './UserProfile'
 import HabitGrid from './HabitGrid'
 import MovementSection from './MovementSection'
@@ -17,6 +18,7 @@ export default function MainDashboard() {
     const { signOut } = useAuth()
     const { getNutritionColor, getDayHabits, updateEstudio, updateLectura, updateMovimiento, customHabitDefinitions, addCustomHabit, updateCustomHabit } = useHabits()
     const { name, profileImage } = useUserProfile()
+    const { theme, toggleTheme } = useTheme()
     const [currentSection, setCurrentSection] = useState<Section>('home')
     const [sidebarOpen, setSidebarOpen] = useState(false)
     const [selectedDate, setSelectedDate] = useState(new Date())
@@ -216,6 +218,18 @@ export default function MainDashboard() {
                 {/* Bottom section */}
                 <div className="space-y-0.5 md:space-y-1 pt-3 md:pt-4 border-t border-border">
                     <button
+                        onClick={toggleTheme}
+                        className="w-full flex items-center gap-2 px-2 md:px-3 py-1.5 md:py-2 rounded-lg text-muted-foreground hover:bg-secondary hover:text-foreground transition-all duration-200 text-xs md:text-sm"
+                        aria-label={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+                    >
+                        {theme === 'dark' ? (
+                            <Sun className="w-3.5 h-3.5 md:w-4 md:h-4 flex-shrink-0" />
+                        ) : (
+                            <Moon className="w-3.5 h-3.5 md:w-4 md:h-4 flex-shrink-0" />
+                        )}
+                        <span className="font-medium">{theme === 'dark' ? 'Modo Claro' : 'Modo Oscuro'}</span>
+                    </button>
+                    <button
                         onClick={() => {
                             setCurrentSection('perfil')
                             setSidebarOpen(false)
@@ -243,13 +257,28 @@ export default function MainDashboard() {
                 {currentSection === 'home' && (
                     <div className="max-w-6xl mx-auto">
                         {/* Header */}
-                        <header className="mb-2 md:mb-3">
-                            <h1 className="text-lg md:text-xl lg:text-2xl font-bold text-foreground mb-0.5 md:mb-1">
-                                Hola, {name}
-                            </h1>
-                            <p className="text-[10px] md:text-xs text-muted-foreground">
-                                Continúa construyendo tus hábitos
-                            </p>
+                        <header className="mb-2 md:mb-3 flex items-start justify-between gap-2">
+                            <div className="flex-1">
+                                <h1 className="text-lg md:text-xl lg:text-2xl font-bold text-foreground mb-0.5 md:mb-1">
+                                    Hola, {name}
+                                </h1>
+                                <p className="text-[10px] md:text-xs text-muted-foreground">
+                                    Continúa construyendo tus hábitos
+                                </p>
+                            </div>
+                            {/* Botón de modo oscuro/claro */}
+                            <button
+                                onClick={toggleTheme}
+                                className="p-2 rounded-lg bg-card border border-border hover:bg-secondary transition-all duration-200 flex-shrink-0"
+                                aria-label={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+                                title={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+                            >
+                                {theme === 'dark' ? (
+                                    <Sun className="w-4 h-4 md:w-5 md:h-5 text-foreground" />
+                                ) : (
+                                    <Moon className="w-4 h-4 md:w-5 md:h-5 text-foreground" />
+                                )}
+                            </button>
                         </header>
 
                         {/* Date Navigation */}
