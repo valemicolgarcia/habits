@@ -85,7 +85,7 @@ VITE_SUPABASE_ANON_KEY=tu-clave-anon-aqui
 ### 4. Configurar la base de datos
 
 1. Ve al **SQL Editor** en tu proyecto de Supabase
-2. **IMPORTANTE**: Ejecuta el contenido completo del archivo `supabase-schema-v2.sql`
+2. **IMPORTANTE**: Ejecuta el contenido completo del archivo `supabase/supabase-schema-v2.sql`
 3. Verifica que las tablas se hayan creado correctamente:
    - `user_profiles`
    - `weekly_routines`
@@ -260,5 +260,6 @@ MIT
 ---
 
 Desarrollado con ❤️ usando React, TypeScript y Supabase
-#   h a b i t s  
+#   h a b i t s 
+ 
  

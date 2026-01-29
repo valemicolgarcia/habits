@@ -7,7 +7,7 @@
 1. Ve a tu proyecto en [Supabase Dashboard](https://app.supabase.com)
 2. Navega a **SQL Editor** (en el menú lateral)
 3. Haz clic en **New Query**
-4. Abre el archivo `supabase-migration-add-day-habits.sql` en tu editor
+4. Abre el archivo `supabase/supabase-migration-add-day-habits.sql` en tu editor
 5. Copia todo el contenido del archivo
 6. Pégalo en el SQL Editor de Supabase
 7. Haz clic en **Run** (o presiona `Ctrl+Enter`)
