@@ -3,6 +3,7 @@ import { useRoutineBlocks } from '../hooks/useRoutineBlocks'
 
 interface MuscleDayConfigProps {
   routineDayId: string
+  onSaveComplete?: () => void
 }
 
 // Tipos para bloques y ejercicios locales (pueden tener IDs temporales)
@@ -27,7 +28,7 @@ interface LocalExercise {
   order_index: number
 }
 
-export default function MuscleDayConfig({ routineDayId }: MuscleDayConfigProps) {
+export default function MuscleDayConfig({ routineDayId, onSaveComplete }: MuscleDayConfigProps) {
   const {
     blocks: dbBlocks,
     loading,
@@ -51,31 +52,38 @@ export default function MuscleDayConfig({ routineDayId }: MuscleDayConfigProps) 
   const [dragOverBlockId, setDragOverBlockId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [nextTempId, setNextTempId] = useState(1)
+  const [hasLocalChanges, setHasLocalChanges] = useState(false)
+  const [isInitialLoad, setIsInitialLoad] = useState(true)
 
-  // Sincronizar bloques de la DB con estado local
+  // Sincronizar bloques de la DB con estado local solo en la carga inicial o después de guardar
   useEffect(() => {
     if (dbBlocks && !loading) {
-      const converted: LocalBlock[] = dbBlocks.map((block) => ({
-        id: block.id,
-        isNew: false,
-        rest_seconds: block.rest_seconds,
-        notes: block.notes,
-        order_index: block.order_index,
-        exercises: block.exercises.map((ex) => ({
-          id: ex.id,
+      // Solo sincronizar si no hay cambios locales pendientes o si es la carga inicial
+      if (isInitialLoad || !hasLocalChanges) {
+        const converted: LocalBlock[] = dbBlocks.map((block) => ({
+          id: block.id,
           isNew: false,
-          block_id: block.id,
-          name: ex.name,
-          target_sets: ex.target_sets,
-          target_reps: ex.target_reps,
-          measurement_type: ex.measurement_type || 'reps',
-          target_time_seconds: ex.target_time_seconds || 0,
-          order_index: ex.order_index,
-        })),
-      }))
-      setLocalBlocks(converted)
+          rest_seconds: block.rest_seconds,
+          notes: block.notes,
+          order_index: block.order_index,
+          exercises: block.exercises.map((ex) => ({
+            id: ex.id,
+            isNew: false,
+            block_id: block.id,
+            name: ex.name,
+            target_sets: ex.target_sets,
+            target_reps: ex.target_reps,
+            measurement_type: ex.measurement_type || 'reps',
+            target_time_seconds: ex.target_time_seconds || 0,
+            order_index: ex.order_index,
+          })),
+        }))
+        setLocalBlocks(converted)
+        setIsInitialLoad(false)
+        setHasLocalChanges(false)
+      }
     }
-  }, [dbBlocks, loading])
+  }, [dbBlocks, loading, isInitialLoad, hasLocalChanges])
 
   const getTempId = () => {
     const id = `temp-${nextTempId}`
@@ -83,17 +91,33 @@ export default function MuscleDayConfig({ routineDayId }: MuscleDayConfigProps) 
     return id
   }
 
-  const handleCreateBlock = (restSeconds: number, notes?: string | null) => {
+  const handleCreateBlock = (restSeconds: number, notes?: string | null, initialExercises?: Omit<LocalExercise, 'id' | 'isNew' | 'block_id' | 'order_index'>[]) => {
     const newBlock: LocalBlock = {
       id: getTempId(),
       isNew: true,
       rest_seconds: restSeconds,
       notes: notes || null,
       order_index: localBlocks.length,
-      exercises: [],
+      exercises: initialExercises ? initialExercises.map((ex, index) => ({
+        ...ex,
+        id: getTempId(),
+        isNew: true,
+        block_id: '', // Se asignará después
+        order_index: index,
+      })) : [],
     }
+    // Asignar el block_id a los ejercicios después de crear el bloque
+    newBlock.exercises = newBlock.exercises.map(ex => ({
+      ...ex,
+      block_id: newBlock.id,
+    }))
     setLocalBlocks((prev) => [...prev, newBlock])
+    setHasLocalChanges(true)
     setShowBlockForm(false)
+    // Si se agregaron ejercicios, mostrar el formulario de ejercicios para ese bloque
+    if (initialExercises && initialExercises.length > 0) {
+      setShowExerciseForm(newBlock.id)
+    }
   }
 
   const handleUpdateBlock = (blockId: string, restSeconds: number, notes?: string | null) => {
@@ -104,11 +128,13 @@ export default function MuscleDayConfig({ routineDayId }: MuscleDayConfigProps) 
           : block
       )
     )
+    setHasLocalChanges(true)
     setEditingBlock(null)
   }
 
   const handleDeleteBlock = (blockId: string) => {
     setLocalBlocks((prev) => prev.filter((block) => block.id !== blockId))
+    setHasLocalChanges(true)
   }
 
   const handleCreateExercise = (
@@ -141,6 +167,7 @@ export default function MuscleDayConfig({ routineDayId }: MuscleDayConfigProps) 
           : b
       )
     )
+    setHasLocalChanges(true)
     setShowExerciseForm(null)
   }
 
@@ -158,17 +185,18 @@ export default function MuscleDayConfig({ routineDayId }: MuscleDayConfigProps) 
         exercises: block.exercises.map((ex) =>
           ex.id === exerciseId
             ? {
-                ...ex,
-                name,
-                target_sets: targetSets,
-                target_reps: targetReps,
-                measurement_type: measurementType,
-                target_time_seconds: targetTimeSeconds,
-              }
+              ...ex,
+              name,
+              target_sets: targetSets,
+              target_reps: targetReps,
+              measurement_type: measurementType,
+              target_time_seconds: targetTimeSeconds,
+            }
             : ex
         ),
       }))
     )
+    setHasLocalChanges(true)
     setEditingExercise(null)
   }
 
@@ -179,6 +207,7 @@ export default function MuscleDayConfig({ routineDayId }: MuscleDayConfigProps) 
         exercises: block.exercises.filter((ex) => ex.id !== exerciseId),
       }))
     )
+    setHasLocalChanges(true)
   }
 
   const handleDragStart = (blockId: string) => {
@@ -230,13 +259,22 @@ export default function MuscleDayConfig({ routineDayId }: MuscleDayConfigProps) 
     setDragOverBlockId(null)
   }
 
-  const handleSaveAll = async () => {
+  const handleSaveAll = async (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault()
+      e.stopPropagation()
+    }
+
     setSaving(true)
     try {
+      console.log('Iniciando guardado...', { localBlocks, dbBlocks })
+
       // 1. Eliminar bloques que fueron eliminados localmente
       const deletedBlockIds = dbBlocks
         .map((b) => b.id)
         .filter((id) => !localBlocks.some((lb) => lb.id === id && !lb.isNew))
+
+      console.log('Bloques a eliminar:', deletedBlockIds)
       for (const blockId of deletedBlockIds) {
         await deleteBlock(blockId)
       }
@@ -246,13 +284,50 @@ export default function MuscleDayConfig({ routineDayId }: MuscleDayConfigProps) 
       for (let i = 0; i < localBlocks.length; i++) {
         const localBlock = localBlocks[i]
         if (localBlock.isNew) {
+          console.log('Creando nuevo bloque:', localBlock)
           // Crear nuevo bloque
           const newBlock = await createBlock(localBlock.rest_seconds, localBlock.notes)
           const newBlockId = newBlock.id
           tempToRealIdMap[localBlock.id] = newBlockId
+          console.log('Bloque creado con ID:', newBlockId)
+
+          // Si el bloque nuevo tiene ejercicios, crearlos inmediatamente
+          if (localBlock.exercises.length > 0) {
+            console.log('Creando ejercicios para bloque nuevo:', localBlock.exercises.length)
+            for (const localExercise of localBlock.exercises) {
+              try {
+                await createExercise(
+                  newBlockId,
+                  localExercise.name,
+                  localExercise.target_sets,
+                  localExercise.target_reps,
+                  localExercise.measurement_type,
+                  localExercise.target_time_seconds
+                )
+                console.log('Ejercicio creado:', localExercise.name)
+              } catch (exErr: any) {
+                console.error('Error creando ejercicio:', exErr)
+                throw new Error(`Error al crear ejercicio "${localExercise.name}": ${exErr.message}`)
+              }
+            }
+          }
         } else {
-          // Actualizar bloque existente
-          await updateBlock(localBlock.id, localBlock.rest_seconds, localBlock.notes)
+          // Verificar si el bloque necesita actualización
+          const dbBlock = dbBlocks.find(b => b.id === localBlock.id)
+          const needsUpdate = !dbBlock ||
+            dbBlock.rest_seconds !== localBlock.rest_seconds ||
+            dbBlock.notes !== localBlock.notes
+
+          if (needsUpdate) {
+            console.log('Actualizando bloque existente:', localBlock.id, {
+              old: { rest_seconds: dbBlock?.rest_seconds, notes: dbBlock?.notes },
+              new: { rest_seconds: localBlock.rest_seconds, notes: localBlock.notes }
+            })
+            // Actualizar bloque existente
+            await updateBlock(localBlock.id, localBlock.rest_seconds, localBlock.notes)
+          } else {
+            console.log('Bloque sin cambios:', localBlock.id)
+          }
           tempToRealIdMap[localBlock.id] = localBlock.id
         }
       }
@@ -260,54 +335,116 @@ export default function MuscleDayConfig({ routineDayId }: MuscleDayConfigProps) 
       // 3. Reordenar bloques si es necesario
       const realBlockIds = localBlocks.map((b) => tempToRealIdMap[b.id] || b.id)
       const currentOrder = dbBlocks.map((b) => b.id)
-      if (JSON.stringify(currentOrder) !== JSON.stringify(realBlockIds)) {
+      // Solo reordenar si hay diferencias y tenemos bloques
+      if (realBlockIds.length > 0 && JSON.stringify(currentOrder) !== JSON.stringify(realBlockIds)) {
+        console.log('Reordenando bloques')
         await reorderBlocks(realBlockIds)
       }
 
-      // 4. Crear/actualizar/eliminar ejercicios
+      // 4. Crear/actualizar/eliminar ejercicios (solo para bloques existentes, los nuevos ya se crearon arriba)
       for (const localBlock of localBlocks) {
-        const realBlockId = tempToRealIdMap[localBlock.id] || localBlock.id
-        const dbBlock = dbBlocks.find((b) => b.id === realBlockId)
+        // Solo procesar bloques que ya existían (no nuevos)
+        if (!localBlock.isNew) {
+          const realBlockId = tempToRealIdMap[localBlock.id] || localBlock.id
+          const dbBlock = dbBlocks.find((b) => b.id === realBlockId)
 
-        // Eliminar ejercicios que fueron eliminados (solo para bloques existentes)
-        if (dbBlock) {
-          const deletedExerciseIds = dbBlock.exercises
-            .map((e) => e.id)
-            .filter((id) => !localBlock.exercises.some((le) => le.id === id && !le.isNew))
-          for (const exerciseId of deletedExerciseIds) {
-            await deleteExercise(exerciseId)
+          // Eliminar ejercicios que fueron eliminados
+          if (dbBlock) {
+            const deletedExerciseIds = dbBlock.exercises
+              .map((e) => e.id)
+              .filter((id) => !localBlock.exercises.some((le) => le.id === id && !le.isNew))
+            for (const exerciseId of deletedExerciseIds) {
+              await deleteExercise(exerciseId)
+            }
           }
-        }
 
-        // Crear/actualizar ejercicios
-        for (const localExercise of localBlock.exercises) {
-          if (localExercise.isNew) {
-            await createExercise(
-              realBlockId,
-              localExercise.name,
-              localExercise.target_sets,
-              localExercise.target_reps,
-              localExercise.measurement_type,
-              localExercise.target_time_seconds
-            )
-          } else {
-            await updateExercise(
-              localExercise.id,
-              localExercise.name,
-              localExercise.target_sets,
-              localExercise.target_reps,
-              localExercise.measurement_type,
-              localExercise.target_time_seconds
-            )
+          // Crear/actualizar ejercicios
+          for (const localExercise of localBlock.exercises) {
+            if (localExercise.isNew) {
+              try {
+                console.log('Creando ejercicio nuevo:', localExercise.name)
+                await createExercise(
+                  realBlockId,
+                  localExercise.name,
+                  localExercise.target_sets,
+                  localExercise.target_reps,
+                  localExercise.measurement_type,
+                  localExercise.target_time_seconds
+                )
+                console.log('Ejercicio creado exitosamente:', localExercise.name)
+              } catch (exErr: any) {
+                console.error('Error creando ejercicio:', exErr)
+                throw new Error(`Error al crear ejercicio "${localExercise.name}": ${exErr.message}`)
+              }
+            } else {
+              // Verificar si el ejercicio necesita actualización
+              const dbExercise = dbBlock?.exercises.find(e => e.id === localExercise.id)
+              const needsUpdate = !dbExercise ||
+                dbExercise.name !== localExercise.name ||
+                dbExercise.target_sets !== localExercise.target_sets ||
+                dbExercise.target_reps !== localExercise.target_reps ||
+                dbExercise.measurement_type !== localExercise.measurement_type ||
+                (dbExercise.target_time_seconds || 0) !== localExercise.target_time_seconds
+
+              if (needsUpdate) {
+                try {
+                  console.log('Actualizando ejercicio:', localExercise.name, {
+                    old: dbExercise ? {
+                      name: dbExercise.name,
+                      sets: dbExercise.target_sets,
+                      reps: dbExercise.target_reps,
+                      type: dbExercise.measurement_type,
+                      time: dbExercise.target_time_seconds
+                    } : 'no existe',
+                    new: {
+                      name: localExercise.name,
+                      sets: localExercise.target_sets,
+                      reps: localExercise.target_reps,
+                      type: localExercise.measurement_type,
+                      time: localExercise.target_time_seconds
+                    }
+                  })
+                  await updateExercise(
+                    localExercise.id,
+                    localExercise.name,
+                    localExercise.target_sets,
+                    localExercise.target_reps,
+                    localExercise.measurement_type,
+                    localExercise.target_time_seconds
+                  )
+                  console.log('Ejercicio actualizado exitosamente:', localExercise.name)
+                } catch (exErr: any) {
+                  console.error('Error actualizando ejercicio:', exErr)
+                  throw new Error(`Error al actualizar ejercicio "${localExercise.name}": ${exErr.message}`)
+                }
+              } else {
+                console.log('Ejercicio sin cambios:', localExercise.name)
+              }
+            }
           }
         }
       }
 
       // Recargar datos
+      console.log('Recargando datos...')
       await reload()
+      console.log('Guardado completado exitosamente')
+
+      // Marcar que ya no hay cambios locales pendientes
+      setHasLocalChanges(false)
+      setIsInitialLoad(true) // Permitir que el useEffect sincronice después del guardado
+
+      // Notificar al componente padre que se completó el guardado
+      if (onSaveComplete) {
+        await onSaveComplete()
+      }
+
       alert('¡Cambios guardados exitosamente!')
     } catch (err: any) {
-      alert('Error al guardar: ' + err.message)
+      console.error('Error saving:', err)
+      const errorMessage = err.message || err.toString() || 'Error desconocido'
+      alert('Error al guardar: ' + errorMessage)
+      throw err // Re-lanzar para que el componente padre pueda manejarlo si es necesario
     } finally {
       setSaving(false)
     }
@@ -318,20 +455,71 @@ export default function MuscleDayConfig({ routineDayId }: MuscleDayConfigProps) 
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" onClick={(e) => e.stopPropagation()}>
       <div className="flex justify-between items-center">
-        <h4 className="font-semibold text-gray-800">Bloques de ejercicios</h4>
+        <div>
+          <h4 className="font-semibold text-gray-800">Bloques de ejercicios</h4>
+          {(localBlocks.some(b => b.isNew || b.exercises.some(e => e.isNew)) ||
+            localBlocks.some(b => {
+              const dbBlock = dbBlocks.find(db => db.id === b.id)
+              if (!dbBlock) return false
+              return b.rest_seconds !== dbBlock.rest_seconds ||
+                b.notes !== dbBlock.notes ||
+                b.exercises.length !== dbBlock.exercises.length ||
+                b.exercises.some(le => {
+                  const dbEx = dbBlock.exercises.find(de => de.id === le.id)
+                  if (!dbEx) return true
+                  return le.name !== dbEx.name ||
+                    le.target_sets !== dbEx.target_sets ||
+                    le.target_reps !== dbEx.target_reps ||
+                    le.measurement_type !== dbEx.measurement_type ||
+                    le.target_time_seconds !== (dbEx.target_time_seconds || 0)
+                })
+            })) && (
+              <p className="text-xs text-yellow-600 mt-1">
+                ⚠️ Tienes cambios sin guardar
+              </p>
+            )}
+        </div>
         <div className="flex gap-2">
           <button
-            onClick={() => setShowBlockForm(true)}
+            type="button"
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              setShowBlockForm(true)
+            }}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
           >
             + Agregar Bloque
           </button>
           <button
-            onClick={handleSaveAll}
-            disabled={saving}
-            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium disabled:opacity-50"
+            type="button"
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              handleSaveAll(e)
+            }}
+            disabled={saving || (localBlocks.length === dbBlocks.length &&
+              !localBlocks.some(b => {
+                const dbBlock = dbBlocks.find(db => db.id === b.id)
+                if (!dbBlock) return b.isNew || b.exercises.some(e => e.isNew)
+                return b.isNew ||
+                  b.exercises.some(e => e.isNew) ||
+                  b.rest_seconds !== dbBlock.rest_seconds ||
+                  b.notes !== dbBlock.notes ||
+                  b.exercises.length !== dbBlock.exercises.length ||
+                  b.exercises.some(le => {
+                    const dbEx = dbBlock.exercises.find(de => de.id === le.id)
+                    if (!dbEx) return true
+                    return le.name !== dbEx.name ||
+                      le.target_sets !== dbEx.target_sets ||
+                      le.target_reps !== dbEx.target_reps ||
+                      le.measurement_type !== dbEx.measurement_type ||
+                      le.target_time_seconds !== (dbEx.target_time_seconds || 0)
+                  })
+              }))}
+            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {saving ? 'Guardando...' : 'Guardar Todo'}
           </button>
@@ -347,8 +535,9 @@ export default function MuscleDayConfig({ routineDayId }: MuscleDayConfigProps) 
       {/* Formulario para crear bloque */}
       {showBlockForm && (
         <BlockForm
-          onSubmit={(restSeconds, notes) => handleCreateBlock(restSeconds, notes)}
+          onSubmit={(restSeconds, notes, exercises) => handleCreateBlock(restSeconds, notes, exercises)}
           onCancel={() => setShowBlockForm(false)}
+          allowAddExercises={true}
         />
       )}
 
@@ -362,18 +551,33 @@ export default function MuscleDayConfig({ routineDayId }: MuscleDayConfigProps) 
           <div
             key={block.id}
             draggable
-            onDragStart={() => handleDragStart(block.id)}
-            onDragOver={(e) => handleDragOver(e, block.id)}
-            onDragLeave={handleDragLeave}
-            onDrop={(e) => handleDrop(e, block.id)}
-            onDragEnd={handleDragEnd}
-            className={`border border-gray-200 rounded-lg p-4 bg-gray-50 transition-all cursor-move ${
-              draggedBlockId === block.id
-                ? 'opacity-50 scale-95'
-                : dragOverBlockId === block.id
+            onDragStart={(e) => {
+              e.stopPropagation()
+              handleDragStart(block.id)
+            }}
+            onDragOver={(e) => {
+              e.stopPropagation()
+              handleDragOver(e, block.id)
+            }}
+            onDragLeave={(e) => {
+              e.stopPropagation()
+              handleDragLeave()
+            }}
+            onDrop={(e) => {
+              e.stopPropagation()
+              handleDrop(e, block.id)
+            }}
+            onDragEnd={(e) => {
+              e.stopPropagation()
+              handleDragEnd()
+            }}
+            onClick={(e) => e.stopPropagation()}
+            className={`border border-gray-200 rounded-lg p-4 bg-gray-50 transition-all cursor-move ${draggedBlockId === block.id
+              ? 'opacity-50 scale-95'
+              : dragOverBlockId === block.id
                 ? 'border-blue-500 border-2 bg-blue-50 scale-105'
                 : 'hover:shadow-md'
-            } ${block.isNew ? 'border-yellow-400 border-2' : ''}`}
+              } ${block.isNew ? 'border-yellow-400 border-2' : ''}`}
           >
             {block.isNew && (
               <div className="mb-2 text-xs text-yellow-700 bg-yellow-50 px-2 py-1 rounded">
@@ -381,14 +585,16 @@ export default function MuscleDayConfig({ routineDayId }: MuscleDayConfigProps) 
               </div>
             )}
             {editingBlock === block.id ? (
-              <BlockForm
-                initialRestSeconds={block.rest_seconds}
-                initialNotes={block.notes || ''}
-                onSubmit={(restSeconds, notes) =>
-                  handleUpdateBlock(block.id, restSeconds, notes)
-                }
-                onCancel={() => setEditingBlock(null)}
-              />
+              <div onClick={(e) => e.stopPropagation()}>
+                <BlockForm
+                  initialRestSeconds={block.rest_seconds}
+                  initialNotes={block.notes || ''}
+                  onSubmit={(restSeconds, notes) =>
+                    handleUpdateBlock(block.id, restSeconds, notes)
+                  }
+                  onCancel={() => setEditingBlock(null)}
+                />
+              </div>
             ) : (
               <>
                 <div className="flex justify-between items-start mb-3">
@@ -423,13 +629,21 @@ export default function MuscleDayConfig({ routineDayId }: MuscleDayConfigProps) 
                   </div>
                   <div className="flex gap-2">
                     <button
-                      onClick={() => setEditingBlock(block.id)}
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        setEditingBlock(block.id)
+                      }}
                       className="text-blue-600 hover:text-blue-700 text-sm font-medium"
                     >
                       Editar
                     </button>
                     <button
-                      onClick={() => {
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
                         if (confirm('¿Eliminar este bloque y todos sus ejercicios?')) {
                           handleDeleteBlock(block.id)
                         }
@@ -449,24 +663,26 @@ export default function MuscleDayConfig({ routineDayId }: MuscleDayConfigProps) 
                       className="bg-white rounded p-3 flex justify-between items-center"
                     >
                       {editingExercise === exercise.id ? (
-                        <ExerciseForm
-                          initialName={exercise.name}
-                          initialTargetSets={exercise.target_sets}
-                          initialTargetReps={exercise.target_reps}
-                          initialMeasurementType={exercise.measurement_type}
-                          initialTargetTimeSeconds={exercise.target_time_seconds}
-                          onSubmit={(name, targetSets, targetReps, measurementType, targetTimeSeconds) =>
-                            handleUpdateExercise(
-                              exercise.id,
-                              name,
-                              targetSets,
-                              targetReps,
-                              measurementType,
-                              targetTimeSeconds
-                            )
-                          }
-                          onCancel={() => setEditingExercise(null)}
-                        />
+                        <div onClick={(e) => e.stopPropagation()}>
+                          <ExerciseForm
+                            initialName={exercise.name}
+                            initialTargetSets={exercise.target_sets}
+                            initialTargetReps={exercise.target_reps}
+                            initialMeasurementType={exercise.measurement_type}
+                            initialTargetTimeSeconds={exercise.target_time_seconds}
+                            onSubmit={(name, targetSets, targetReps, measurementType, targetTimeSeconds) =>
+                              handleUpdateExercise(
+                                exercise.id,
+                                name,
+                                targetSets,
+                                targetReps,
+                                measurementType,
+                                targetTimeSeconds
+                              )
+                            }
+                            onCancel={() => setEditingExercise(null)}
+                          />
+                        </div>
                       ) : (
                         <>
                           <div>
@@ -483,13 +699,21 @@ export default function MuscleDayConfig({ routineDayId }: MuscleDayConfigProps) 
                           </div>
                           <div className="flex gap-2">
                             <button
-                              onClick={() => setEditingExercise(exercise.id)}
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                setEditingExercise(exercise.id)
+                              }}
                               className="text-blue-600 hover:text-blue-700 text-sm"
                             >
                               Editar
                             </button>
                             <button
-                              onClick={() => {
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault()
+                                e.stopPropagation()
                                 if (confirm('¿Eliminar este ejercicio?')) {
                                   handleDeleteExercise(exercise.id)
                                 }
@@ -506,22 +730,29 @@ export default function MuscleDayConfig({ routineDayId }: MuscleDayConfigProps) 
 
                   {/* Botón para agregar ejercicio */}
                   {showExerciseForm === block.id ? (
-                    <ExerciseForm
-                      onSubmit={(name, targetSets, targetReps, measurementType, targetTimeSeconds) =>
-                        handleCreateExercise(
-                          block.id,
-                          name,
-                          targetSets,
-                          targetReps,
-                          measurementType,
-                          targetTimeSeconds
-                        )
-                      }
-                      onCancel={() => setShowExerciseForm(null)}
-                    />
+                    <div onClick={(e) => e.stopPropagation()}>
+                      <ExerciseForm
+                        onSubmit={(name, targetSets, targetReps, measurementType, targetTimeSeconds) =>
+                          handleCreateExercise(
+                            block.id,
+                            name,
+                            targetSets,
+                            targetReps,
+                            measurementType,
+                            targetTimeSeconds
+                          )
+                        }
+                        onCancel={() => setShowExerciseForm(null)}
+                      />
+                    </div>
                   ) : (
                     <button
-                      onClick={() => setShowExerciseForm(block.id)}
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        setShowExerciseForm(block.id)
+                      }}
                       className="text-blue-600 hover:text-blue-700 text-sm font-medium py-2"
                     >
                       + Agregar ejercicio
@@ -543,23 +774,52 @@ function BlockForm({
   initialNotes = '',
   onSubmit,
   onCancel,
+  allowAddExercises = false,
 }: {
   initialRestSeconds?: number
   initialNotes?: string
-  onSubmit: (restSeconds: number, notes?: string) => void
+  onSubmit: (restSeconds: number, notes?: string, exercises?: Omit<LocalExercise, 'id' | 'isNew' | 'block_id' | 'order_index'>[]) => void
   onCancel: () => void
+  allowAddExercises?: boolean
 }) {
   const [restSeconds, setRestSeconds] = useState(initialRestSeconds)
   const [notes, setNotes] = useState(initialNotes)
+  const [exercises, setExercises] = useState<Omit<LocalExercise, 'id' | 'isNew' | 'block_id' | 'order_index'>[]>([])
+  const [showExerciseForm, setShowExerciseForm] = useState(false)
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    e.stopPropagation()
     const trimmedNotes = notes.trim() || undefined
-    onSubmit(restSeconds, trimmedNotes)
+    onSubmit(restSeconds, trimmedNotes, exercises.length > 0 ? exercises : undefined)
+  }
+
+  const handleAddExercise = (
+    name: string,
+    targetSets: number,
+    targetReps: string,
+    measurementType: 'reps' | 'time',
+    targetTimeSeconds: number
+  ) => {
+    setExercises((prev) => [
+      ...prev,
+      {
+        name,
+        target_sets: targetSets,
+        target_reps: targetReps,
+        measurement_type: measurementType,
+        target_time_seconds: targetTimeSeconds,
+      },
+    ])
+    setShowExerciseForm(false)
+  }
+
+  const handleRemoveExercise = (index: number) => {
+    setExercises((prev) => prev.filter((_, i) => i !== index))
   }
 
   return (
-    <form onSubmit={handleSubmit} className="bg-white rounded-lg p-4 border border-gray-200">
+    <form onSubmit={handleSubmit} onClick={(e) => e.stopPropagation()} className="bg-white rounded-lg p-4 border border-gray-200">
       <div className="space-y-3">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -585,16 +845,83 @@ function BlockForm({
             placeholder="Agrega una nota para este bloque (ej: 'Enfoque en técnica', 'Aumentar peso gradualmente', etc.)"
           />
         </div>
+
+        {/* Sección para agregar ejercicios al crear bloque */}
+        {allowAddExercises && (
+          <div className="border-t border-gray-200 pt-3">
+            <div className="flex justify-between items-center mb-2">
+              <label className="block text-sm font-medium text-gray-700">
+                Ejercicios (opcional)
+              </label>
+              {!showExerciseForm && (
+                <button
+                  type="button"
+                  onClick={() => setShowExerciseForm(true)}
+                  className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                >
+                  + Agregar ejercicio
+                </button>
+              )}
+            </div>
+
+            {/* Lista de ejercicios agregados */}
+            {exercises.length > 0 && (
+              <div className="space-y-2 mb-2">
+                {exercises.map((exercise, index) => (
+                  <div
+                    key={index}
+                    className="flex items-center justify-between bg-gray-50 p-2 rounded-lg"
+                  >
+                    <div className="flex-1">
+                      <span className="font-medium text-gray-800">{exercise.name}</span>
+                      <span className="text-sm text-gray-600 ml-2">
+                        {exercise.target_sets} series ×{' '}
+                        {exercise.measurement_type === 'time'
+                          ? `${exercise.target_time_seconds || 0}s`
+                          : `${exercise.target_reps} reps`}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveExercise(index)}
+                      className="text-red-600 hover:text-red-700 text-sm"
+                    >
+                      Eliminar
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Formulario para agregar ejercicio */}
+            {showExerciseForm && (
+              <div className="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                <ExerciseForm
+                  onSubmit={handleAddExercise}
+                  onCancel={() => setShowExerciseForm(false)}
+                />
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="flex gap-2">
           <button
             type="submit"
+            onClick={(e) => {
+              e.stopPropagation()
+            }}
             className="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 font-medium"
           >
-            Agregar
+            {allowAddExercises ? 'Crear Bloque' : 'Agregar'}
           </button>
           <button
             type="button"
-            onClick={onCancel}
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              onCancel()
+            }}
             className="flex-1 bg-gray-200 text-gray-700 py-2 rounded-lg hover:bg-gray-300 font-medium"
           >
             Cancelar
@@ -637,13 +964,14 @@ function ExerciseForm({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    e.stopPropagation()
     if (name.trim()) {
       onSubmit(name.trim(), targetSets, targetReps, measurementType, targetTimeSeconds)
     }
   }
 
   return (
-    <form onSubmit={handleSubmit} className="bg-white rounded-lg p-3 border border-gray-200">
+    <form onSubmit={handleSubmit} onClick={(e) => e.stopPropagation()} className="bg-white rounded-lg p-3 border border-gray-200">
       <div className="space-y-2">
         <input
           type="text"
@@ -659,22 +987,20 @@ function ExerciseForm({
             <button
               type="button"
               onClick={() => setMeasurementType('reps')}
-              className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                measurementType === 'reps'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
+              className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${measurementType === 'reps'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
             >
               Repeticiones
             </button>
             <button
               type="button"
               onClick={() => setMeasurementType('time')}
-              className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                measurementType === 'time'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
+              className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${measurementType === 'time'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
             >
               Tiempo
             </button>
@@ -723,13 +1049,20 @@ function ExerciseForm({
         <div className="flex gap-2">
           <button
             type="submit"
+            onClick={(e) => {
+              e.stopPropagation()
+            }}
             className="flex-1 bg-blue-600 text-white py-1.5 rounded-lg hover:bg-blue-700 text-sm font-medium"
           >
             Agregar
           </button>
           <button
             type="button"
-            onClick={onCancel}
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              onCancel()
+            }}
             className="flex-1 bg-gray-200 text-gray-700 py-1.5 rounded-lg hover:bg-gray-300 text-sm font-medium"
           >
             Cancelar

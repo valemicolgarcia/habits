@@ -28,6 +28,10 @@ export default function Profile({ onSave }: ProfileProps = {}) {
   }
 
   const handleDayClick = (dayOfWeek: DayOfWeek) => {
+    // Si el día ya está seleccionado, no hacer nada para evitar cerrar la vista
+    if (selectedDay === dayOfWeek) {
+      return
+    }
     const routine = getRoutineForDay(dayOfWeek)
     setSelectedDay(dayOfWeek)
     setSelectedDayType(routine?.type || null)
@@ -39,6 +43,18 @@ export default function Profile({ onSave }: ProfileProps = {}) {
     setSaveSuccess(false)
 
     try {
+      console.log('Guardando rutina completa...')
+
+      // Primero, guardar todos los cambios pendientes de bloques/ejercicios
+      // Esto se hace automáticamente cuando el usuario hace clic en "Guardar Todo" en MuscleDayConfig
+      // Pero también recargamos para asegurar que todo esté sincronizado
+
+      // Recargar datos para asegurar que todo está sincronizado
+      await reload()
+
+      // Esperar un momento para que se actualice el estado después de recargar
+      await new Promise((resolve) => setTimeout(resolve, 500))
+
       // Validar que los 7 días estén configurados
       if (!isComplete()) {
         const missingDays = DAYS_OF_WEEK.filter(
@@ -50,30 +66,20 @@ export default function Profile({ onSave }: ProfileProps = {}) {
         )
       }
 
-      // Recargar datos para asegurar que todo está sincronizado
-      await reload()
-
-      // Esperar un momento para que se actualice el estado después de recargar
-      await new Promise((resolve) => setTimeout(resolve, 200))
-      
       // Verificar que realmente tenemos 7 días configurados
-      // Nota: El estado se actualizará después del reload, pero para estar seguros
-      // verificamos que isComplete() retorne true
       if (!isComplete()) {
         throw new Error('Error al validar la rutina. Por favor, intenta nuevamente.')
       }
 
+      console.log('Rutina guardada exitosamente')
+
       // Mostrar feedback de éxito
       setSaveSuccess(true)
 
-      // Esperar un momento para que el usuario vea el mensaje de éxito
-      setTimeout(() => {
-        // Redirigir al dashboard
-        if (onSave) {
-          onSave()
-        }
-      }, 1500)
+      // NO cerrar automáticamente - el usuario puede cerrar manualmente si quiere
+      // El botón "Guardar Cambios" solo valida y guarda, no cierra la vista
     } catch (err: any) {
+      console.error('Error al guardar rutina:', err)
       setSaveError(err.message || 'Error al guardar la rutina')
     } finally {
       setSaving(false)
@@ -167,9 +173,8 @@ export default function Profile({ onSave }: ProfileProps = {}) {
             return (
               <div
                 key={dayOfWeek}
-                className={`bg-white rounded-xl shadow-lg p-5 cursor-pointer transition-all ${
-                  isSelected ? 'ring-2 ring-blue-500' : 'hover:shadow-xl'
-                }`}
+                className={`bg-white rounded-xl shadow-lg p-5 cursor-pointer transition-all ${isSelected ? 'ring-2 ring-blue-500' : 'hover:shadow-xl'
+                  }`}
                 onClick={() => handleDayClick(dayOfWeek)}
               >
                 <div className="flex justify-between items-center">
@@ -184,23 +189,21 @@ export default function Profile({ onSave }: ProfileProps = {}) {
                   <div className="flex items-center gap-2">
                     {routine && (
                       <span
-                        className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                          routine.type === 'musculacion'
-                            ? 'bg-purple-100 text-purple-700'
-                            : routine.type === 'running'
+                        className={`px-3 py-1 rounded-full text-xs font-semibold ${routine.type === 'musculacion'
+                          ? 'bg-purple-100 text-purple-700'
+                          : routine.type === 'running'
                             ? 'bg-green-100 text-green-700'
                             : routine.type === 'aerobico'
-                            ? 'bg-blue-100 text-blue-700'
-                            : 'bg-gray-100 text-gray-700'
-                        }`}
+                              ? 'bg-blue-100 text-blue-700'
+                              : 'bg-gray-100 text-gray-700'
+                          }`}
                       >
                         {getDayTypeName(routine.type)}
                       </span>
                     )}
                     <svg
-                      className={`w-5 h-5 text-gray-400 transition-transform ${
-                        isSelected ? 'rotate-90' : ''
-                      }`}
+                      className={`w-5 h-5 text-gray-400 transition-transform ${isSelected ? 'rotate-90' : ''
+                        }`}
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -230,11 +233,10 @@ export default function Profile({ onSave }: ProfileProps = {}) {
                               e.stopPropagation()
                               handleDayTypeChange(dayOfWeek, type)
                             }}
-                            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                              selectedDayType === type
-                                ? 'bg-blue-600 text-white'
-                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                            }`}
+                            className={`px-4 py-2 rounded-lg font-medium transition-colors ${selectedDayType === type
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                              }`}
                           >
                             {getDayTypeName(type)}
                           </button>
@@ -244,8 +246,16 @@ export default function Profile({ onSave }: ProfileProps = {}) {
 
                     {/* Configuración específica según el tipo */}
                     {selectedDayType === 'musculacion' && routine && (
-                      <div className="mt-4">
-                        <MuscleDayConfig routineDayId={routine.id} />
+                      <div className="mt-4" onClick={(e) => e.stopPropagation()}>
+                        <MuscleDayConfig
+                          routineDayId={routine.id}
+                          onSaveComplete={async () => {
+                            // Recargar rutinas después de guardar cambios en bloques
+                            // pero sin cerrar la vista
+                            await reload()
+                            // No hacer nada más, mantener la vista abierta
+                          }}
+                        />
                       </div>
                     )}
                   </div>
@@ -261,13 +271,12 @@ export default function Profile({ onSave }: ProfileProps = {}) {
             <button
               onClick={handleSaveRoutine}
               disabled={saving || !isComplete()}
-              className={`flex-1 py-4 rounded-xl font-bold text-lg transition-all ${
-                saving
-                  ? 'bg-gray-400 cursor-not-allowed'
-                  : isComplete()
+              className={`flex-1 py-4 rounded-xl font-bold text-lg transition-all ${saving
+                ? 'bg-gray-400 cursor-not-allowed'
+                : isComplete()
                   ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl transform hover:scale-[1.02]'
                   : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-              }`}
+                }`}
             >
               {saving ? (
                 <span className="flex items-center justify-center gap-2">
