@@ -819,7 +819,12 @@ function BlockForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} onClick={(e) => e.stopPropagation()} className="bg-white rounded-lg p-4 border border-gray-200">
+    <form
+      onSubmit={handleSubmit}
+      onClick={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
+      className="bg-white rounded-lg p-4 border border-gray-200"
+    >
       <div className="space-y-3">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -856,7 +861,11 @@ function BlockForm({
               {!showExerciseForm && (
                 <button
                   type="button"
-                  onClick={() => setShowExerciseForm(true)}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    setShowExerciseForm(true)
+                  }}
                   className="text-sm text-blue-600 hover:text-blue-700 font-medium"
                 >
                   + Agregar ejercicio
@@ -895,7 +904,11 @@ function BlockForm({
 
             {/* Formulario para agregar ejercicio */}
             {showExerciseForm && (
-              <div className="bg-gray-50 p-3 rounded-lg border border-gray-200">
+              <div
+                className="bg-gray-50 p-3 rounded-lg border border-gray-200"
+                onClick={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
+              >
                 <ExerciseForm
                   onSubmit={handleAddExercise}
                   onCancel={() => setShowExerciseForm(false)}
@@ -970,14 +983,37 @@ function ExerciseForm({
     }
   }
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      e.stopPropagation()
+      if (name.trim()) {
+        onSubmit(name.trim(), targetSets, targetReps, measurementType, targetTimeSeconds)
+      }
+    }
+  }
+
   return (
-    <form onSubmit={handleSubmit} onClick={(e) => e.stopPropagation()} className="bg-white rounded-lg p-3 border border-gray-200">
+    <div
+      onClick={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
+      onKeyDown={handleKeyDown}
+      className="bg-white rounded-lg p-3 border border-gray-200"
+    >
       <div className="space-y-2">
         <input
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          required
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              e.stopPropagation()
+              if (name.trim()) {
+                onSubmit(name.trim(), targetSets, targetReps, measurementType, targetTimeSeconds)
+              }
+            }
+          }}
           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
           placeholder="Nombre del ejercicio"
         />
@@ -1048,9 +1084,13 @@ function ExerciseForm({
         </div>
         <div className="flex gap-2">
           <button
-            type="submit"
+            type="button"
             onClick={(e) => {
+              e.preventDefault()
               e.stopPropagation()
+              if (name.trim()) {
+                onSubmit(name.trim(), targetSets, targetReps, measurementType, targetTimeSeconds)
+              }
             }}
             className="flex-1 bg-blue-600 text-white py-1.5 rounded-lg hover:bg-blue-700 text-sm font-medium"
           >
@@ -1069,6 +1109,6 @@ function ExerciseForm({
           </button>
         </div>
       </div>
-    </form>
+    </div>
   )
 }
