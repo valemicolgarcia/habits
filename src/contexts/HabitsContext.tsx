@@ -146,8 +146,6 @@ export function HabitsProvider({ children }: { children: ReactNode }) {
       if (savedDefinitions) {
         setCustomHabitDefinitions(JSON.parse(savedDefinitions))
       }
-    } catch (error) {
-      console.error('Error loading habits from Supabase:', error)
     }
   }
 
