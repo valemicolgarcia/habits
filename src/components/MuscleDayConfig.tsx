@@ -975,14 +975,6 @@ function ExerciseForm({
   const [measurementType, setMeasurementType] = useState<'reps' | 'time'>(initialMeasurementType)
   const [targetTimeSeconds, setTargetTimeSeconds] = useState(initialTargetTimeSeconds)
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    if (name.trim()) {
-      onSubmit(name.trim(), targetSets, targetReps, measurementType, targetTimeSeconds)
-    }
-  }
-
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       e.preventDefault()
