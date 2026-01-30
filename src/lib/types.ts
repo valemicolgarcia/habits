@@ -132,3 +132,31 @@ export interface BlockData {
 export interface ExerciseDataWithNote extends ExerciseData {
   note?: string
 }
+
+// Nutrición: comidas con foto e ingredientes (Nutri AI)
+export type MealType = 'desayuno' | 'almuerzo' | 'merienda' | 'cena'
+
+export interface Meal {
+  id: string
+  user_id: string
+  date: string
+  meal_type: MealType
+  image_url: string | null
+  health_level: 0 | 1 | 2 // 0=Mal, 1=Regular, 2=Sano
+  star_rating: number | null // 1-5
+  created_at?: string
+  updated_at?: string
+}
+
+export interface MealIngredient {
+  id: string
+  meal_id: string
+  ingredient_name: string
+  confirmed: boolean
+  added_manually: boolean
+  created_at?: string
+}
+
+export interface MealWithIngredients extends Meal {
+  ingredients?: MealIngredient[]
+}

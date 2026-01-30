@@ -9,10 +9,11 @@ import UserProfile from './UserProfile'
 import HabitGrid from './HabitGrid'
 import MovementSection from './MovementSection'
 import NutritionPage from './NutritionPage'
+import NutritionHistory from './NutritionHistory'
 import StudyPage from './StudyPage'
 import ReadingPage from './ReadingPage'
 
-type Section = 'home' | 'movimiento' | 'nutricion' | 'estudio' | 'lectura' | 'perfil'
+type Section = 'home' | 'movimiento' | 'nutricion' | 'nutricion-historial' | 'estudio' | 'lectura' | 'perfil'
 
 export default function MainDashboard() {
     const { signOut } = useAuth()
@@ -25,6 +26,7 @@ export default function MainDashboard() {
     const [showAddHabitModal, setShowAddHabitModal] = useState(false)
     const [newHabitName, setNewHabitName] = useState('')
     const [newHabitEmoji, setNewHabitEmoji] = useState('')
+    const [nutritionHistoryKey, setNutritionHistoryKey] = useState(0)
     const selectedDateStr = formatDate(selectedDate)
     const dayHabits = getDayHabits(selectedDateStr)
     const [estudioCompleted, setEstudioCompleted] = useState(dayHabits.estudio)
@@ -119,8 +121,26 @@ export default function MainDashboard() {
         return <MovementSection onBack={() => setCurrentSection('home')} />
     }
 
+    if (currentSection === 'nutricion-historial') {
+        return (
+            <NutritionHistory
+                onBack={() => setCurrentSection('nutricion')}
+                refreshKey={nutritionHistoryKey}
+            />
+        )
+    }
+
     if (currentSection === 'nutricion') {
-        return <NutritionPage onBack={() => setCurrentSection('home')} date={selectedDateStr} />
+        return (
+            <NutritionPage
+                onBack={() => setCurrentSection('home')}
+                date={selectedDateStr}
+                onOpenHistory={() => {
+                    setNutritionHistoryKey((k) => k + 1)
+                    setCurrentSection('nutricion-historial')
+                }}
+            />
+        )
     }
 
     if (currentSection === 'estudio') {

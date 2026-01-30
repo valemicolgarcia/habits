@@ -31,3 +31,9 @@ dist-ssr
 *.sw?
 /nuevoDISENIO/
 
+# Python / backend (entornos virtuales y cache)
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo

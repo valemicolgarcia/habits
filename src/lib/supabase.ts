@@ -28,6 +28,10 @@ export type {
   ExerciseSetData,
   ExerciseData,
   BlockData,
+  MealType,
+  Meal,
+  MealIngredient,
+  MealWithIngredients,
 } from './types'
 
 // Tipos legacy para compatibilidad con hooks antiguos

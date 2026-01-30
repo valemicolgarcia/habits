@@ -1,59 +1,441 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useHabits } from '../contexts/HabitsContext'
+import { useAuth } from '../hooks/useAuth'
+import { supabase } from '../lib/supabase'
 import { formatDate } from '../lib/utils'
-import type { NutritionMeal } from '../contexts/HabitsContext'
+import {
+  detectIngredients,
+  detectIngredientsImage,
+  translateIngredient,
+} from '../lib/nutriApi'
+import type { Meal, MealIngredient, MealType } from '../lib/types'
+import { Star, Plus, X, Loader2, History } from 'lucide-react'
+
+const MEAL_TYPES: MealType[] = ['desayuno', 'almuerzo', 'merienda', 'cena']
+
+const MEAL_LABELS: Record<MealType, string> = {
+  desayuno: 'Desayuno',
+  almuerzo: 'Almuerzo',
+  merienda: 'Merienda',
+  cena: 'Cena',
+}
+
+const SCORE_LABELS: Record<0 | 1 | 2, string> = {
+  0: 'Mal',
+  1: 'Regular',
+  2: 'Sano',
+}
+
+interface IngredientWithConfirm {
+  labelEn: string
+  labelEs: string
+  confirmed: boolean
+  addedManually: boolean
+}
+
+interface MealFormState {
+  file: File | null
+  segmentedImageUrl: string | null
+  ingredients: IngredientWithConfirm[]
+  manualInput: string
+  healthLevel: 0 | 1 | 2 | null
+  starRating: number | null
+  loading: boolean
+  error: string | null
+  isRegistering: boolean // true = usuario hizo clic en "Registrar comida" (puede anotar a mano sin foto)
+}
+
+const BUCKET_MEAL_IMAGES = 'meal-images'
 
 interface NutritionPageProps {
   onBack: () => void
-  date?: string // Fecha en formato YYYY-MM-DD, si no se proporciona usa hoy
+  date?: string
+  onOpenHistory?: () => void
 }
 
-export default function NutritionPage({ onBack, date }: NutritionPageProps) {
-  const { getDayHabits, updateNutricion, updateNutricionPermitido, getNutritionScore, getNutritionColor } = useHabits()
+export default function NutritionPage({ onBack, date, onOpenHistory }: NutritionPageProps) {
+  const { user } = useAuth()
+  const { getDayHabits, updateNutricion, getNutritionScore, getNutritionColor } = useHabits()
   const today = formatDate(new Date())
-  const selectedDate = date || today
+  const selectedDate = date ?? today
   const dayHabits = getDayHabits(selectedDate)
-  const [meals, setMeals] = useState<NutritionMeal[]>(dayHabits.nutricion)
-  const [permitido, setPermitido] = useState(dayHabits.nutricionPermitido || false)
+  const [mealsFromDb, setMealsFromDb] = useState<(Meal & { ingredients?: MealIngredient[] })[]>([])
+  const [loadingMeals, setLoadingMeals] = useState(true)
+  const [forms, setForms] = useState<Record<MealType, MealFormState>>(() =>
+    Object.fromEntries(
+      MEAL_TYPES.map((t) => [
+        t,
+        {
+          file: null,
+          segmentedImageUrl: null,
+          ingredients: [],
+          manualInput: '',
+          healthLevel: null,
+          starRating: null,
+          loading: false,
+          error: null,
+          isRegistering: false,
+        },
+      ])
+    ) as Record<MealType, MealFormState>
+  )
+  const fileInputRefs = useRef<Record<MealType, HTMLInputElement | null>>({
+    desayuno: null,
+    almuerzo: null,
+    merienda: null,
+    cena: null,
+  })
+  const [saveLoading, setSaveLoading] = useState<MealType | null>(null)
+  const [saveSuccess, setSaveSuccess] = useState<MealType | null>(null)
 
-  // Sincronizar comidas cuando cambie la fecha
+  // Cargar comidas guardadas para la fecha seleccionada
   useEffect(() => {
-    const currentHabits = getDayHabits(selectedDate)
-    setMeals(currentHabits.nutricion)
-    setPermitido(currentHabits.nutricionPermitido || false)
-  }, [selectedDate, getDayHabits])
+    if (!user) return
+    let cancelled = false
+    const load = async () => {
+      setLoadingMeals(true)
+      const { data: mealsData, error: mealsError } = await supabase
+        .from('meals')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('date', selectedDate)
+        .order('meal_type')
+
+      if (cancelled) return
+      if (mealsError) {
+        setMealsFromDb([])
+        setLoadingMeals(false)
+        return
+      }
+
+      const mealIds = (mealsData || []).map((m) => m.id)
+      if (mealIds.length === 0) {
+        setMealsFromDb(mealsData || [])
+        setLoadingMeals(false)
+        return
+      }
+
+      const { data: ingredientsData } = await supabase
+        .from('meal_ingredients')
+        .select('*')
+        .in('meal_id', mealIds)
+
+      const ingredientsByMeal: Record<string, MealIngredient[]> = {}
+      ;(ingredientsData || []).forEach((i) => {
+        if (!ingredientsByMeal[i.meal_id]) ingredientsByMeal[i.meal_id] = []
+        ingredientsByMeal[i.meal_id].push(i)
+      })
+
+      const withIngredients = (mealsData || []).map((m) => ({
+        ...m,
+        ingredients: ingredientsByMeal[m.id] || [],
+      }))
+      setMealsFromDb(withIngredients)
+      setLoadingMeals(false)
+    }
+    load()
+    return () => {
+      cancelled = true
+    }
+  }, [user, selectedDate])
+
+  const getMealForType = (mealType: MealType) =>
+    mealsFromDb.find((m) => m.meal_type === mealType)
+
+  const getMealScoreFromHabits = (mealType: MealType): 0 | 1 | 2 | null => {
+    const m = dayHabits.nutricion.find((n) => n.meal === mealType)
+    return m ? m.score : null
+  }
+
+  const handleHealthScore = (mealType: MealType, score: 0 | 1 | 2) => {
+    const updatedNutricion = dayHabits.nutricion.filter((m) => m.meal !== mealType)
+    updatedNutricion.push({ meal: mealType, score })
+    updatedNutricion.sort((a, b) => MEAL_TYPES.indexOf(a.meal) - MEAL_TYPES.indexOf(b.meal))
+    updateNutricion(selectedDate, updatedNutricion)
+    setForms((prev) => ({ ...prev, [mealType]: { ...prev[mealType], healthLevel: score } }))
+  }
+
+  const updateSavedMealHealth = async (mealType: MealType, newLevel: 0 | 1 | 2) => {
+    const saved = getMealForType(mealType)
+    if (!saved || !user) return
+    const { error } = await supabase
+      .from('meals')
+      .update({ health_level: newLevel })
+      .eq('id', saved.id)
+    if (error) return
+    const updatedNutricion = dayHabits.nutricion.filter((m) => m.meal !== mealType)
+    updatedNutricion.push({ meal: mealType, score: newLevel })
+    updatedNutricion.sort((a, b) => MEAL_TYPES.indexOf(a.meal) - MEAL_TYPES.indexOf(b.meal))
+    updateNutricion(selectedDate, updatedNutricion)
+    setMealsFromDb((prev) =>
+      prev.map((m) =>
+        m.meal_type === mealType ? { ...m, health_level: newLevel } : m
+      )
+    )
+  }
+
+  const handleFileSelect = async (mealType: MealType, file: File) => {
+    if (!file.type.startsWith('image/')) {
+      setForms((prev) => ({
+        ...prev,
+        [mealType]: { ...prev[mealType], error: 'Elige una imagen (JPEG, PNG, etc.)' },
+      }))
+      return
+    }
+    setForms((prev) => ({
+      ...prev,
+      [mealType]: {
+        ...prev[mealType],
+        file,
+        loading: true,
+        error: null,
+        segmentedImageUrl: null,
+        ingredients: [],
+      },
+    }))
+
+    try {
+      const [detection, imageBlob] = await Promise.all([
+        detectIngredients(file, mealType),
+        detectIngredientsImage(file, mealType),
+      ])
+
+      const segmentedUrl = URL.createObjectURL(imageBlob)
+      const seenEn = new Set<string>()
+      const ingredients: IngredientWithConfirm[] = detection.ingredients
+        .filter((d) => {
+          const key = d.label.toLowerCase().trim()
+          if (seenEn.has(key)) return false
+          seenEn.add(key)
+          return true
+        })
+        .map((d) => ({
+          labelEn: d.label,
+          labelEs: translateIngredient(d.label),
+          confirmed: true,
+          addedManually: false,
+        }))
+
+      setForms((prev) => ({
+        ...prev,
+        [mealType]: {
+          ...prev[mealType],
+          loading: false,
+          segmentedImageUrl: segmentedUrl,
+          ingredients,
+          error: null,
+        },
+      }))
+    } catch (e) {
+      setForms((prev) => ({
+        ...prev,
+        [mealType]: {
+          ...prev[mealType],
+          loading: false,
+          error: e instanceof Error ? e.message : 'Error al analizar la imagen',
+        },
+      }))
+    }
+  }
+
+  const removeIngredient = (mealType: MealType, index: number) => {
+    setForms((prev) => {
+      const list = prev[mealType].ingredients.filter((_, i) => i !== index)
+      return { ...prev, [mealType]: { ...prev[mealType], ingredients: list } }
+    })
+  }
+
+  const addManualIngredient = (mealType: MealType) => {
+    const form = forms[mealType]
+    const name = form.manualInput.trim()
+    if (!name) return
+    const key = name.toLowerCase()
+    const alreadyExists = form.ingredients.some(
+      (i) => i.labelEs.toLowerCase() === key
+    )
+    if (alreadyExists) return
+    setForms((prev) => ({
+      ...prev,
+      [mealType]: {
+        ...prev[mealType],
+        ingredients: [
+          ...prev[mealType].ingredients,
+          { labelEn: name, labelEs: name, confirmed: true, addedManually: true },
+        ],
+        manualInput: '',
+      },
+    }))
+  }
+
+  const setHealthLevel = (mealType: MealType, level: 0 | 1 | 2) => {
+    setForms((prev) => ({
+      ...prev,
+      [mealType]: { ...prev[mealType], healthLevel: level },
+    }))
+  }
+
+  const setStarRating = (mealType: MealType, stars: number) => {
+    setForms((prev) => ({
+      ...prev,
+      [mealType]: { ...prev[mealType], starRating: stars },
+    }))
+  }
+
+  const saveMeal = async (mealType: MealType) => {
+    const form = forms[mealType]
+    const effectiveHealth = form.healthLevel ?? getMealScoreFromHabits(mealType)
+
+    if (!user) {
+      setForms((prev) => ({
+        ...prev,
+        [mealType]: { ...prev[mealType], error: 'Debes iniciar sesión para guardar.' },
+      }))
+      return
+    }
+    if (effectiveHealth === null) {
+      setForms((prev) => ({
+        ...prev,
+        [mealType]: { ...prev[mealType], error: 'Selecciona qué tan sana fue la comida (Sano / Regular / Mal).' },
+      }))
+      return
+    }
+    if (form.starRating === null) {
+      setForms((prev) => ({
+        ...prev,
+        [mealType]: { ...prev[mealType], error: 'Selecciona las estrellas (cómo te cayó).' },
+      }))
+      return
+    }
+
+    setSaveLoading(mealType)
+    setForms((prev) => ({ ...prev, [mealType]: { ...prev[mealType], error: null } }))
+
+    let imageUrl: string | null = null
+    if (form.file && form.segmentedImageUrl) {
+      try {
+        const blob = await fetch(form.segmentedImageUrl).then((r) => r.blob())
+        const path = `${user.id}/${selectedDate}/${mealType}.jpg`
+        const { error: uploadError } = await supabase.storage
+          .from(BUCKET_MEAL_IMAGES)
+          .upload(path, blob, { contentType: 'image/jpeg', upsert: true })
+        if (uploadError) {
+          console.error('Error subiendo imagen:', uploadError)
+          // Seguimos guardando la comida sin imagen
+        } else {
+          const { data: urlData } = supabase.storage.from(BUCKET_MEAL_IMAGES).getPublicUrl(path)
+          imageUrl = urlData.publicUrl
+        }
+      } catch (e) {
+        console.error('Error al obtener blob de la imagen:', e)
+        // Seguimos guardando la comida sin imagen
+      }
+    }
+
+    const { data: mealRow, error: mealError } = await supabase
+      .from('meals')
+      .upsert(
+        {
+          user_id: user.id,
+          date: selectedDate,
+          meal_type: mealType,
+          image_url: imageUrl,
+          health_level: effectiveHealth,
+          star_rating: form.starRating,
+        },
+        { onConflict: ['user_id', 'date', 'meal_type'] }
+      )
+      .select('id')
+      .maybeSingle()
+
+    if (mealError) {
+      setSaveLoading(null)
+      setForms((prev) => ({
+        ...prev,
+        [mealType]: { ...prev[mealType], error: `Error al guardar la comida: ${mealError.message}` },
+      }))
+      return
+    }
+    if (!mealRow?.id) {
+      setSaveLoading(null)
+      setForms((prev) => ({
+        ...prev,
+        [mealType]: { ...prev[mealType], error: 'No se recibió el ID de la comida. ¿Ejecutaste la migración de Supabase (meals)?' },
+      }))
+      return
+    }
+
+    await supabase.from('meal_ingredients').delete().eq('meal_id', mealRow.id)
+
+    const ingredientsToSave = form.ingredients
+    if (ingredientsToSave.length > 0) {
+      const { error: ingError } = await supabase.from('meal_ingredients').insert(
+        ingredientsToSave.map((i) => ({
+          meal_id: mealRow.id,
+          ingredient_name: i.labelEs,
+          confirmed: true,
+          added_manually: i.addedManually,
+        }))
+      )
+      if (ingError) {
+        setSaveLoading(null)
+        setForms((prev) => ({
+          ...prev,
+          [mealType]: { ...prev[mealType], error: `Comida guardada pero error en ingredientes: ${ingError.message}` },
+        }))
+        return
+      }
+    }
+
+    const updatedNutricion = dayHabits.nutricion.filter((m) => m.meal !== mealType)
+    updatedNutricion.push({ meal: mealType, score: effectiveHealth })
+    updatedNutricion.sort((a, b) => MEAL_TYPES.indexOf(a.meal) - MEAL_TYPES.indexOf(b.meal))
+    updateNutricion(selectedDate, updatedNutricion)
+
+    setMealsFromDb((prev) => {
+      const rest = prev.filter((m) => m.meal_type !== mealType)
+      return [
+        ...rest,
+        {
+          id: mealRow.id,
+          user_id: user.id,
+          date: selectedDate,
+          meal_type: mealType,
+          image_url: imageUrl,
+          health_level: effectiveHealth,
+          star_rating: form.starRating,
+          ingredients: ingredientsToSave.map((ing, i) => ({
+            id: `temp-${i}`,
+            meal_id: mealRow.id,
+            ingredient_name: ing.labelEs,
+            confirmed: true,
+            added_manually: ing.addedManually,
+          })),
+        },
+      ].sort((a, b) => MEAL_TYPES.indexOf(a.meal_type) - MEAL_TYPES.indexOf(b.meal_type))
+    })
+
+    setForms((prev) => ({
+      ...prev,
+      [mealType]: {
+        file: null,
+        segmentedImageUrl: null,
+        ingredients: [],
+        manualInput: '',
+        healthLevel: null,
+        starRating: null,
+        loading: false,
+        error: null,
+        isRegistering: false,
+      },
+    }))
+    if (form.segmentedImageUrl) URL.revokeObjectURL(form.segmentedImageUrl)
+    setSaveLoading(null)
+    setSaveSuccess(mealType)
+    setTimeout(() => setSaveSuccess(null), 3000)
+  }
 
   const score = getNutritionScore(selectedDate)
   const color = getNutritionColor(selectedDate)
-
-  const mealLabels: Record<NutritionMeal['meal'], string> = {
-    desayuno: 'Desayuno',
-    almuerzo: 'Almuerzo',
-    merienda: 'Merienda',
-    cena: 'Cena',
-  }
-
-  const scoreLabels: Record<0 | 1 | 2, string> = {
-    0: 'Mal',
-    1: 'Regular',
-    2: 'Sano',
-  }
-
-  const handleMealScore = (meal: NutritionMeal['meal'], score: 0 | 1 | 2) => {
-    const updatedMeals = meals.filter((m) => m.meal !== meal)
-    updatedMeals.push({ meal, score })
-    updatedMeals.sort((a, b) => {
-      const order = ['desayuno', 'almuerzo', 'merienda', 'cena']
-      return order.indexOf(a.meal) - order.indexOf(b.meal)
-    })
-    setMeals(updatedMeals)
-    updateNutricion(selectedDate, updatedMeals)
-  }
-
-  const getMealScore = (meal: NutritionMeal['meal']): 0 | 1 | 2 | null => {
-    const mealData = meals.find((m) => m.meal === meal)
-    return mealData ? mealData.score : null
-  }
 
   const getColorClass = () => {
     if (color === 'green') return 'bg-green-500 dark:bg-green-600'
@@ -61,12 +443,6 @@ export default function NutritionPage({ onBack, date }: NutritionPageProps) {
     if (color === 'orange') return 'bg-orange-500 dark:bg-orange-600'
     if (color === 'purple') return 'bg-purple-500 dark:bg-purple-600'
     return 'bg-red-500 dark:bg-red-600'
-  }
-
-  const handlePermitidoToggle = () => {
-    const newValue = !permitido
-    setPermitido(newValue)
-    updateNutricionPermitido(selectedDate, newValue)
   }
 
   return (
@@ -89,7 +465,6 @@ export default function NutritionPage({ onBack, date }: NutritionPageProps) {
         </div>
       </header>
       <main className="max-w-2xl mx-auto px-4 py-6">
-        {/* Resumen del día */}
         <div className={`${getColorClass()} text-white rounded-xl shadow-lg p-6 mb-6`}>
           <div className="text-center">
             <h2 className="text-2xl font-bold mb-2">Puntuación del día</h2>
@@ -103,36 +478,41 @@ export default function NutritionPage({ onBack, date }: NutritionPageProps) {
           </div>
         </div>
 
-        {/* Lista de comidas */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 mb-6">
-          <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100 mb-4">
-            Comidas del día
-          </h3>
-          <div className="space-y-4">
-            {(['desayuno', 'almuerzo', 'merienda', 'cena'] as NutritionMeal['meal'][]).map((meal) => {
-              const currentScore = getMealScore(meal)
+        {loadingMeals ? (
+          <div className="flex justify-center py-8">
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          </div>
+        ) : (
+          <div className="space-y-6 mb-6">
+            {MEAL_TYPES.map((mealType) => {
+              const saved = getMealForType(mealType)
+              const form = forms[mealType]
+
+              const currentScore = getMealScoreFromHabits(mealType)
+              const healthLevel = saved ? (saved.health_level as 0 | 1 | 2) : (form.healthLevel ?? currentScore)
+
               return (
                 <div
-                  key={meal}
-                  className="flex items-center justify-between p-4 border border-gray-200 dark:border-gray-700 rounded-lg"
+                  key={mealType}
+                  className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-4 border border-gray-200 dark:border-gray-700"
                 >
-                  <div>
-                    <h4 className="font-semibold text-gray-800 dark:text-gray-100">
-                      {mealLabels[meal]}
-                    </h4>
-                    {currentScore !== null && (
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
-                        {scoreLabels[currentScore]}
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex gap-2">
+                  <h3 className="font-bold text-gray-800 dark:text-gray-100 mb-3">
+                    {MEAL_LABELS[mealType]}
+                  </h3>
+
+                  {/* Sano | Regular | Mal: siempre editables. Registrar comida solo si no está guardada */}
+                  <div className="flex items-center gap-2 flex-wrap">
                     {([2, 1, 0] as const).map((scoreValue) => (
                       <button
                         key={scoreValue}
-                        onClick={() => handleMealScore(meal, scoreValue)}
-                        className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                          currentScore === scoreValue
+                        type="button"
+                        onClick={() =>
+                          saved
+                            ? updateSavedMealHealth(mealType, scoreValue)
+                            : handleHealthScore(mealType, scoreValue)
+                        }
+                        className={`px-4 py-2 rounded-lg font-medium transition-colors text-sm ${
+                          healthLevel === scoreValue
                             ? scoreValue === 2
                               ? 'bg-green-500 dark:bg-green-600 text-white'
                               : scoreValue === 1
@@ -140,92 +520,255 @@ export default function NutritionPage({ onBack, date }: NutritionPageProps) {
                               : 'bg-red-500 dark:bg-red-600 text-white'
                             : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
                         }`}
+                        title={saved ? 'Cambiar (Sano/Regular/Mal)' : undefined}
                       >
-                        {scoreLabels[scoreValue]}
+                        {SCORE_LABELS[scoreValue]}
                       </button>
                     ))}
+                    {!saved && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setForms((prev) => ({
+                            ...prev,
+                            [mealType]: { ...prev[mealType], isRegistering: true, error: null },
+                          }))
+                        }
+                        className="px-4 py-2 rounded-lg font-medium text-sm bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                        title="Anotar lo que comiste (con o sin foto) y guardar en el historial"
+                      >
+                        Registrar comida
+                      </button>
+                    )}
                   </div>
+
+                  {!saved && (
+                    <input
+                      ref={(el) => { fileInputRefs.current[mealType] = el }}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0]
+                        if (f) handleFileSelect(mealType, f)
+                        e.target.value = ''
+                      }}
+                    />
+                  )}
+
+                  {form.loading && (
+                    <div className="mt-3 flex items-center gap-2 text-sm text-gray-500">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Analizando imagen...
+                    </div>
+                  )}
+
+                  {form.error && (
+                    <p className="mt-2 text-sm text-red-600 dark:text-red-400">{form.error}</p>
+                  )}
+
+                  {saved ? (
+                    <>
+                      {saved.image_url && (
+                        <img
+                          src={saved.image_url}
+                          alt={MEAL_LABELS[mealType]}
+                          className="w-full rounded-lg object-cover max-h-48 mt-3"
+                        />
+                      )}
+                      {saved.star_rating != null && (
+                        <div className="flex gap-0.5 mt-2">
+                          {[1, 2, 3, 4, 5].map((n) => (
+                            <Star
+                              key={n}
+                              className={`w-5 h-5 ${
+                                n <= saved.star_rating!
+                                  ? 'fill-amber-400 text-amber-400'
+                                  : 'text-gray-300 dark:text-gray-600'
+                              }`}
+                            />
+                          ))}
+                        </div>
+                      )}
+                      {saved.ingredients && saved.ingredients.filter((i) => i.confirmed).length > 0 && (
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                          {saved.ingredients.filter((i) => i.confirmed).map((i) => i.ingredient_name).join(', ')}
+                        </p>
+                      )}
+                    </>
+                  ) : (form.segmentedImageUrl || form.isRegistering) ? (
+                    <>
+                      {form.isRegistering && !form.segmentedImageUrl && (
+                        <div className="mt-3 mb-3">
+                          <button
+                            type="button"
+                            onClick={() => fileInputRefs.current[mealType]?.click()}
+                            disabled={form.loading}
+                            className="text-sm text-primary hover:underline"
+                          >
+                            📷 Adjuntar foto (opcional) — detectar ingredientes con el modelo
+                          </button>
+                        </div>
+                      )}
+                      {form.segmentedImageUrl && (
+                        <img
+                          src={form.segmentedImageUrl}
+                          alt="Segmentación"
+                          className="w-full rounded-lg object-cover max-h-56 mt-3 mb-3"
+                        />
+                      )}
+                      {form.segmentedImageUrl && form.ingredients.length > 0 ? (
+                        <>
+                          <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                            ¿Comiste estos alimentos? (Sí / No). Elimina el que no corresponda para mejorar futuras respuestas.
+                          </p>
+                          <ul className="space-y-2 mb-3">
+                            {form.ingredients.map((ing, i) => (
+                              <li key={i} className="flex items-center gap-2">
+                                <span className="flex-1 text-gray-800 dark:text-gray-200 text-sm">
+                                  {ing.labelEs}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => removeIngredient(mealType, i)}
+                                  className="p-1.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-500 hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                                  title="Eliminar de la lista (no lo comí)"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        </>
+                      ) : form.segmentedImageUrl ? (
+                        <p className="text-sm text-amber-600 dark:text-amber-400 mb-3">
+                          No se detectaron ingredientes. Puedes agregarlos a mano abajo.
+                        </p>
+                      ) : null}
+                      <div className="flex gap-2 mb-3">
+                        <input
+                          type="text"
+                          value={form.manualInput}
+                          onChange={(e) =>
+                            setForms((prev) => ({
+                              ...prev,
+                              [mealType]: { ...prev[mealType], manualInput: e.target.value },
+                            }))
+                          }
+                          placeholder={form.isRegistering && !form.segmentedImageUrl ? '¿Qué comiste? (ej: café con leche, tostadas)' : 'Agregar ingrediente a mano'}
+                          className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 text-sm"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => addManualIngredient(mealType)}
+                          className="p-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90"
+                        >
+                          <Plus className="w-5 h-5" />
+                        </button>
+                      </div>
+                      <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        ¿Cómo te cayó? (1-5 estrellas)
+                      </p>
+                      <div className="flex gap-0.5 mb-3">
+                        {[1, 2, 3, 4, 5].map((n) => (
+                          <button
+                            key={n}
+                            type="button"
+                            onClick={() => setStarRating(mealType, n)}
+                            className="p-0.5"
+                          >
+                            <Star
+                              className={`w-7 h-7 ${
+                                form.starRating != null && n <= form.starRating
+                                  ? 'fill-amber-400 text-amber-400'
+                                  : 'text-gray-300 dark:text-gray-600'
+                              }`}
+                            />
+                          </button>
+                        ))}
+                      </div>
+                      {saveSuccess === mealType && (
+                        <p className="text-sm text-green-600 dark:text-green-400 font-medium mb-2">
+                          ✓ Comida guardada correctamente
+                        </p>
+                      )}
+                      {form.isRegistering && (
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                          Anota lo que comiste y las estrellas; se guardará en tu historial.
+                        </p>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => saveMeal(mealType)}
+                        disabled={healthLevel === null || form.starRating === null || saveLoading === mealType}
+                        className="w-full py-2.5 rounded-lg bg-primary text-primary-foreground font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      >
+                        {saveLoading === mealType ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Guardando...
+                          </>
+                        ) : (
+                          'Guardar comida'
+                        )}
+                      </button>
+                    </>
+                  ) : null}
                 </div>
               )
             })}
           </div>
-          
-          {/* Botón de Permitido */}
-          <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
-            <div className="flex items-center justify-between">
-              <div>
-                <h4 className="font-semibold text-gray-800 dark:text-gray-100 mb-1">
-                  Permitido
-                </h4>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Marca si tuviste un permitido este día
-                </p>
-              </div>
-              <button
-                onClick={handlePermitidoToggle}
-                className={`px-6 py-3 rounded-lg font-medium transition-colors ${
-                  permitido
-                    ? 'bg-yellow-500 dark:bg-yellow-600 text-white'
-                    : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                }`}
-              >
-                {permitido ? 'Permitido ✓' : 'Marcar Permitido'}
-              </button>
+        )}
+
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 mb-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h4 className="font-semibold text-gray-800 dark:text-gray-100 mb-1">Permitido</h4>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Marca si tuviste un permitido este día
+              </p>
             </div>
+            <PermitidoToggle date={selectedDate} />
           </div>
         </div>
 
-        {/* Leyenda */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
-          <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100 mb-4">
-            Sistema de puntuación
-          </h3>
-          <div className="space-y-3 text-sm text-gray-600 dark:text-gray-400 mb-6">
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-green-500" />
-              <span><strong>Sano (2 pts):</strong> Comida balanceada y nutritiva</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-yellow-500" />
-              <span><strong>Regular (1 pt):</strong> Comida aceptable pero mejorable</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-red-500" />
-              <span><strong>Mal (0 pts):</strong> Comida poco saludable</span>
-            </div>
-          </div>
-          
-          <h4 className="text-md font-bold text-gray-800 dark:text-gray-100 mb-3">
-            Colores en el calendario mensual
-          </h4>
-          <div className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-green-500" />
-              <span><strong>Verde:</strong> 4 comidas sanas</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-yellow-500" />
-              <span><strong>Amarillo:</strong> 3 comidas sanas y 1 regular</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-orange-500" />
-              <span><strong>Naranja:</strong> 2 comidas sanas y 2 regulares</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-purple-500" />
-              <span><strong>Violeta:</strong> 3 comidas sanas y 1 mala</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-red-500" />
-              <span><strong>Rojo:</strong> 2 sanas y 2 malas, 1 sana y 3 malas, o 4 malas</span>
-            </div>
-            <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
-              <div className="w-4 h-4 rounded border-2 border-black dark:border-white bg-transparent" />
-              <span><strong>Borde negro:</strong> Día con permitido</span>
-            </div>
-          </div>
+        {onOpenHistory && (
+          <button
+            type="button"
+            onClick={onOpenHistory}
+            className="w-full py-3 rounded-xl border-2 border-gray-200 dark:border-gray-700 flex items-center justify-center gap-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+          >
+            <History className="w-5 h-5" />
+            Historial de comidas
+          </button>
+        )}
+
+        <div className="mt-6 p-4 bg-white dark:bg-gray-800 rounded-xl text-sm text-gray-600 dark:text-gray-400">
+          <h4 className="font-semibold text-gray-800 dark:text-gray-100 mb-2">Sistema de puntuación</h4>
+          <p><strong>Sano (2 pts):</strong> Comida balanceada y nutritiva</p>
+          <p><strong>Regular (1 pt):</strong> Comida aceptable pero mejorable</p>
+          <p><strong>Mal (0 pts):</strong> Comida poco saludable</p>
         </div>
       </main>
     </div>
+  )
+}
+
+function PermitidoToggle({ date }: { date: string }) {
+  const { getDayHabits, updateNutricionPermitido } = useHabits()
+  const dayHabits = getDayHabits(date)
+  const permitido = dayHabits.nutricionPermitido ?? false
+
+  return (
+    <button
+      onClick={() => updateNutricionPermitido(date, !permitido)}
+      className={`px-6 py-3 rounded-lg font-medium ${
+        permitido
+          ? 'bg-yellow-500 dark:bg-yellow-600 text-white'
+          : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+      }`}
+    >
+      {permitido ? 'Permitido ✓' : 'Marcar Permitido'}
+    </button>
   )
 }
