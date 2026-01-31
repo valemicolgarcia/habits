@@ -61,24 +61,23 @@ export default function NutritionPage({ onBack, date, onOpenHistory }: Nutrition
   const dayHabits = getDayHabits(selectedDate)
   const [mealsFromDb, setMealsFromDb] = useState<(Meal & { ingredients?: MealIngredient[] })[]>([])
   const [loadingMeals, setLoadingMeals] = useState(true)
-  const [forms, setForms] = useState<Record<MealType, MealFormState>>(() =>
-    Object.fromEntries(
-      MEAL_TYPES.map((t) => [
-        t,
-        {
-          file: null,
-          segmentedImageUrl: null,
-          ingredients: [],
-          manualInput: '',
-          healthLevel: null,
-          starRating: null,
-          loading: false,
-          error: null,
-          isRegistering: false,
-        },
-      ])
-    ) as Record<MealType, MealFormState>
-  )
+  const initialFormState: MealFormState = {
+    file: null,
+    segmentedImageUrl: null,
+    ingredients: [],
+    manualInput: '',
+    healthLevel: null,
+    starRating: null,
+    loading: false,
+    error: null,
+    isRegistering: false,
+  }
+  const [forms, setForms] = useState<Record<MealType, MealFormState>>({
+    desayuno: { ...initialFormState },
+    almuerzo: { ...initialFormState },
+    merienda: { ...initialFormState },
+    cena: { ...initialFormState },
+  })
   const fileInputRefs = useRef<Record<MealType, HTMLInputElement | null>>({
     desayuno: null,
     almuerzo: null,
@@ -267,13 +266,6 @@ export default function NutritionPage({ onBack, date, onOpenHistory }: Nutrition
     }))
   }
 
-  const setHealthLevel = (mealType: MealType, level: 0 | 1 | 2) => {
-    setForms((prev) => ({
-      ...prev,
-      [mealType]: { ...prev[mealType], healthLevel: level },
-    }))
-  }
-
   const setStarRating = (mealType: MealType, stars: number) => {
     setForms((prev) => ({
       ...prev,
@@ -342,7 +334,7 @@ export default function NutritionPage({ onBack, date, onOpenHistory }: Nutrition
           health_level: effectiveHealth,
           star_rating: form.starRating,
         },
-        { onConflict: ['user_id', 'date', 'meal_type'] }
+        { onConflict: 'user_id,date,meal_type' }
       )
       .select('id')
       .maybeSingle()
