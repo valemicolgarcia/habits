@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { useHabits } from '../contexts/HabitsContext'
 import { useUserProfile } from '../contexts/UserProfileContext'
 import { useTheme } from '../hooks/useTheme'
 import { formatDate } from '../lib/utils'
-import { Home, Dumbbell, Apple, BookOpen, GraduationCap, User, LogOut, Menu, X, ChevronLeft, ChevronRight, Plus, Moon, Sun } from 'lucide-react'
+import { chatRAG, type ChatMessage } from '../lib/ragApi'
+import { Home, Dumbbell, Apple, BookOpen, GraduationCap, User, LogOut, Menu, X, ChevronLeft, ChevronRight, Plus, Moon, Sun, Send, Loader2 } from 'lucide-react'
 import UserProfile from './UserProfile'
 import HabitGrid from './HabitGrid'
 import MovementSection from './MovementSection'
@@ -32,6 +33,10 @@ export default function MainDashboard() {
     const [estudioCompleted, setEstudioCompleted] = useState(dayHabits.estudio)
     const [lecturaCompleted, setLecturaCompleted] = useState(dayHabits.lectura)
     const [movimientoManual, setMovimientoManual] = useState(dayHabits.movimiento && !dayHabits.movimientoRutinaCompletada)
+    const [ragMessages, setRagMessages] = useState<ChatMessage[]>([])
+    const [ragInput, setRagInput] = useState('')
+    const [ragLoading, setRagLoading] = useState(false)
+    const ragMessagesEndRef = useRef<HTMLDivElement>(null)
 
     // Sincronizar estado cuando cambien los hábitos o la fecha seleccionada
     useEffect(() => {
@@ -40,6 +45,36 @@ export default function MainDashboard() {
         setLecturaCompleted(currentHabits.lectura)
         setMovimientoManual(currentHabits.movimiento && !currentHabits.movimientoRutinaCompletada)
     }, [selectedDateStr, getDayHabits])
+
+    // Scroll al final del chat cuando hay nuevos mensajes
+    useEffect(() => {
+        ragMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }, [ragMessages])
+
+    const handleRAGSubmit = async (e: React.FormEvent) => {
+        e.preventDefault()
+        if (!ragInput.trim() || ragLoading) return
+
+        const userMessage: ChatMessage = { role: 'user', content: ragInput.trim() }
+        const newMessages = [...ragMessages, userMessage]
+        setRagMessages(newMessages)
+        setRagInput('')
+        setRagLoading(true)
+
+        try {
+            const response = await chatRAG(userMessage.content, ragMessages)
+            const assistantMessage: ChatMessage = { role: 'assistant', content: response }
+            setRagMessages([...newMessages, assistantMessage])
+        } catch (error) {
+            const errorMessage: ChatMessage = {
+                role: 'assistant',
+                content: `Error: ${error instanceof Error ? error.message : 'No se pudo obtener respuesta'}`,
+            }
+            setRagMessages([...newMessages, errorMessage])
+        } finally {
+            setRagLoading(false)
+        }
+    }
 
     const getNutritionButtonColor = () => {
         const dayHabitsForDate = getDayHabits(selectedDateStr)
@@ -328,6 +363,67 @@ export default function MainDashboard() {
                             >
                                 <ChevronRight className="w-3.5 h-3.5 md:w-4 md:h-4 text-muted-foreground" />
                             </button>
+                        </div>
+
+                        {/* RAG Chat - Barra de preguntas sobre nutrición y entrenamiento */}
+                        <div className="mb-2 md:mb-3 bg-card rounded-lg md:rounded-xl border border-border overflow-hidden">
+                            <div className="p-2 md:p-3">
+                                <h3 className="text-[10px] md:text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1.5 md:mb-2">
+                                    Pregunta sobre nutrición y entrenamiento
+                                </h3>
+                                {/* Mensajes del chat */}
+                                {ragMessages.length > 0 && (
+                                    <div className="max-h-48 md:max-h-64 overflow-y-auto mb-2 md:mb-3 space-y-2 pr-1">
+                                        {ragMessages.map((msg, idx) => (
+                                            <div
+                                                key={idx}
+                                                className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                                            >
+                                                <div
+                                                    className={`max-w-[85%] md:max-w-[75%] rounded-lg px-2 md:px-3 py-1.5 md:py-2 text-[10px] md:text-xs ${
+                                                        msg.role === 'user'
+                                                            ? 'bg-primary text-primary-foreground'
+                                                            : 'bg-secondary text-foreground'
+                                                    }`}
+                                                >
+                                                    {msg.content}
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {ragLoading && (
+                                            <div className="flex justify-start">
+                                                <div className="bg-secondary text-foreground rounded-lg px-2 md:px-3 py-1.5 md:py-2 flex items-center gap-2">
+                                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                                    <span className="text-[10px] md:text-xs">Pensando...</span>
+                                                </div>
+                                            </div>
+                                        )}
+                                        <div ref={ragMessagesEndRef} />
+                                    </div>
+                                )}
+                                {/* Input y botón de envío */}
+                                <form onSubmit={handleRAGSubmit} className="flex gap-1.5 md:gap-2">
+                                    <input
+                                        type="text"
+                                        value={ragInput}
+                                        onChange={(e) => setRagInput(e.target.value)}
+                                        placeholder="Ej: ¿Cuántas proteínas necesito al día?"
+                                        disabled={ragLoading}
+                                        className="flex-1 px-2 md:px-3 py-1.5 md:py-2 text-[10px] md:text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
+                                    />
+                                    <button
+                                        type="submit"
+                                        disabled={!ragInput.trim() || ragLoading}
+                                        className="px-2 md:px-3 py-1.5 md:py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                                    >
+                                        {ragLoading ? (
+                                            <Loader2 className="w-3 h-3 md:w-4 md:h-4 animate-spin" />
+                                        ) : (
+                                            <Send className="w-3 h-3 md:w-4 md:h-4" />
+                                        )}
+                                    </button>
+                                </form>
+                            </div>
                         </div>
 
                         {/* Progress Summary - Solo mostrar si estamos viendo la fecha de hoy */}

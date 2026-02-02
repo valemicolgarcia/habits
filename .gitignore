@@ -37,3 +37,17 @@ venv/
 __pycache__/
 *.pyc
 *.pyo
+
+# Resúmenes .md de nutri-ai-backend (ignorar)
+nutri-ai-backend/*RESUMEN*.md
+nutri-ai-backend/RESUMEN*.md
+
+# RAG service: índice persistido (se genera al indexar)
+rag-service/storage/*
+!rag-service/storage/.gitkeep
+rag-service/.env
+
+# RAG service: índice persistido (se genera al indexar)
+rag-service/storage/*
+!rag-service/storage/.gitkeep
+rag-service/.env

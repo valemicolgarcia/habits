@@ -659,6 +659,29 @@ export default function NutritionPage({ onBack, date, onOpenHistory }: Nutrition
                         </button>
                       </div>
                       <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        ¿Qué tan sana fue esta comida?
+                      </p>
+                      <div className="flex gap-2 mb-3">
+                        {([2, 1, 0] as const).map((scoreValue) => (
+                          <button
+                            key={scoreValue}
+                            type="button"
+                            onClick={() => handleHealthScore(mealType, scoreValue)}
+                            className={`px-3 py-2 rounded-lg font-medium text-sm transition-colors ${
+                              form.healthLevel === scoreValue
+                                ? scoreValue === 2
+                                  ? 'bg-green-500 dark:bg-green-600 text-white'
+                                  : scoreValue === 1
+                                  ? 'bg-yellow-500 dark:bg-yellow-600 text-white'
+                                  : 'bg-red-500 dark:bg-red-600 text-white'
+                                : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                            }`}
+                          >
+                            {SCORE_LABELS[scoreValue]}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                         ¿Cómo te cayó? (1-5 estrellas)
                       </p>
                       <div className="flex gap-0.5 mb-3">
