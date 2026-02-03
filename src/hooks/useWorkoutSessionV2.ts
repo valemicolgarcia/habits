@@ -131,22 +131,35 @@ export function useWorkoutSessionV2(date: Date, dayType: DayType) {
         sessionId = newSession.id
       }
 
-      // Eliminar logs antiguos
-      if (session?.strengthLogs) {
-        for (const log of session.strengthLogs) {
-          await supabase.from('strength_logs').delete().eq('id', log.id)
-        }
+      // OPTIMIZACIÓN: Eliminar todos los logs antiguos de una vez (batch)
+      if (sessionId) {
+        const { error: deleteError } = await supabase
+          .from('strength_logs')
+          .delete()
+          .eq('session_id', sessionId)
+
+        if (deleteError) throw deleteError
       }
 
-      // Crear nuevos logs
+      // OPTIMIZACIÓN: Preparar todos los logs nuevos en un array
+      const newLogs: Array<{
+        session_id: string
+        block_id: string
+        exercise_name: string
+        set_number: number
+        weight: number
+        reps: number
+        time_seconds: number | null
+      }> = []
+
       for (const block of blocks) {
         for (const exercise of block.exercises) {
           for (let i = 0; i < exercise.sets.length; i++) {
             const set = exercise.sets[i]
             const timeSeconds = (set as any).timeSeconds || 0
             if (set.weight > 0 || set.reps > 0 || timeSeconds > 0) {
-              const { error: logError } = await supabase.from('strength_logs').insert({
-                session_id: sessionId,
+              newLogs.push({
+                session_id: sessionId!,
                 block_id: block.blockId,
                 exercise_name: exercise.exerciseName,
                 set_number: i + 1,
@@ -154,52 +167,91 @@ export function useWorkoutSessionV2(date: Date, dayType: DayType) {
                 reps: set.reps,
                 time_seconds: timeSeconds > 0 ? timeSeconds : null,
               })
-
-              if (logError) throw logError
             }
-          }
-
-          // Guardar nota del ejercicio si existe
-          const exerciseWithNote = exercise as any
-          if (exerciseWithNote.note && exerciseWithNote.note.trim()) {
-            // Intentar actualizar nota existente o crear nueva
-            const { data: existingNote } = await supabase
-              .from('exercise_notes')
-              .select('id')
-              .eq('session_id', sessionId)
-              .eq('block_id', block.blockId)
-              .eq('exercise_name', exercise.exerciseName)
-              .maybeSingle()
-
-            if (existingNote) {
-              const { error: updateError } = await supabase
-                .from('exercise_notes')
-                .update({ note: exerciseWithNote.note.trim() })
-                .eq('id', existingNote.id)
-
-              if (updateError) throw updateError
-            } else {
-              const { error: insertError } = await supabase
-                .from('exercise_notes')
-                .insert({
-                  session_id: sessionId,
-                  block_id: block.blockId,
-                  exercise_name: exercise.exerciseName,
-                  note: exerciseWithNote.note.trim(),
-                })
-
-              if (insertError) throw insertError
-            }
-          } else {
-            // Eliminar nota si está vacía
-            await supabase
-              .from('exercise_notes')
-              .delete()
-              .eq('session_id', sessionId)
-              .eq('block_id', block.blockId)
-              .eq('exercise_name', exercise.exerciseName)
           }
         }
+      }
+
+      // OPTIMIZACIÓN: Insertar todos los logs de una vez (batch)
+      if (newLogs.length > 0) {
+        const { error: insertError } = await supabase
+          .from('strength_logs')
+          .insert(newLogs)
+
+        if (insertError) throw insertError
+      }
+
+      // OPTIMIZACIÓN: Manejar notas de forma más eficiente
+      // Primero, obtener todas las notas existentes de una vez
+      const { data: existingNotes } = await supabase
+        .from('exercise_notes')
+        .select('id, block_id, exercise_name')
+        .eq('session_id', sessionId!)
+
+      const existingNotesMap = new Map<string, string>()
+      if (existingNotes) {
+        for (const note of existingNotes) {
+          const key = `${note.block_id}-${note.exercise_name}`
+          existingNotesMap.set(key, note.id)
+        }
+      }
+
+      // Preparar arrays para inserts, updates y deletes
+      const notesToInsert: Array<{
+        session_id: string
+        block_id: string
+        exercise_name: string
+        note: string
+      }> = []
+      const notesToUpdate: Array<{ id: string; note: string }> = []
+      const notesToDelete: string[] = []
+
+      for (const block of blocks) {
+        for (const exercise of block.exercises) {
+          const exerciseWithNote = exercise as any
+          const key = `${block.blockId}-${exercise.exerciseName}`
+          const existingNoteId = existingNotesMap.get(key)
+
+          if (exerciseWithNote.note && exerciseWithNote.note.trim()) {
+            if (existingNoteId) {
+              notesToUpdate.push({ id: existingNoteId, note: exerciseWithNote.note.trim() })
+            } else {
+              notesToInsert.push({
+                session_id: sessionId!,
+                block_id: block.blockId,
+                exercise_name: exercise.exerciseName,
+                note: exerciseWithNote.note.trim(),
+              })
+            }
+          } else if (existingNoteId) {
+            notesToDelete.push(existingNoteId)
+          }
+        }
+      }
+
+      // Ejecutar operaciones en batch
+      if (notesToInsert.length > 0) {
+        const { error: insertError } = await supabase.from('exercise_notes').insert(notesToInsert)
+        if (insertError) throw insertError
+      }
+
+      if (notesToUpdate.length > 0) {
+        // Actualizar notas una por una (Supabase no soporta batch update fácilmente)
+        for (const note of notesToUpdate) {
+          const { error: updateError } = await supabase
+            .from('exercise_notes')
+            .update({ note: note.note })
+            .eq('id', note.id)
+          if (updateError) throw updateError
+        }
+      }
+
+      if (notesToDelete.length > 0) {
+        const { error: deleteError } = await supabase
+          .from('exercise_notes')
+          .delete()
+          .in('id', notesToDelete)
+        if (deleteError) throw deleteError
       }
 
       await loadSession()
