@@ -93,13 +93,25 @@ export function HabitsProvider({ children }: { children: ReactNode }) {
       const habitsMap: Record<string, DayHabits> = {}
       if (habitsData) {
         habitsData.forEach((row) => {
+          // Validar y normalizar nutricion
+          let nutricion: NutritionMeal[] = []
+          if (row.nutricion && Array.isArray(row.nutricion)) {
+            nutricion = row.nutricion.filter((m: any) =>
+              m &&
+              typeof m.score === 'number' &&
+              (m.score === 0 || m.score === 1 || m.score === 2) &&
+              m.meal &&
+              ['desayuno', 'almuerzo', 'merienda', 'cena'].includes(m.meal)
+            ) as NutritionMeal[]
+          }
+
           habitsMap[row.date] = {
             date: row.date,
             movimiento: row.movimiento || false,
             movimientoRutinaCompletada: row.movimiento_rutina_completada || false,
             estudio: row.estudio || false,
             lectura: row.lectura || false,
-            nutricion: (row.nutricion as NutritionMeal[]) || [],
+            nutricion: nutricion,
             nutricionPermitido: row.nutricion_permitido || false,
             customHabits: (row.custom_habits as Record<string, boolean>) || {},
           }
@@ -128,7 +140,7 @@ export function HabitsProvider({ children }: { children: ReactNode }) {
       // Migrar datos de localStorage a Supabase si existen
       const localHabits = localStorage.getItem('habits')
       const localDefinitions = localStorage.getItem('customHabitDefinitions')
-      
+
       if (localHabits || localDefinitions) {
         await migrateLocalStorageToSupabase(
           localHabits ? JSON.parse(localHabits) : {},
@@ -335,10 +347,32 @@ export function HabitsProvider({ children }: { children: ReactNode }) {
   }
 
   const updateNutricion = async (date: string, meals: NutritionMeal[]) => {
+    // Validar y normalizar las comidas
+    const validMeals = meals.filter(m =>
+      m &&
+      typeof m.score === 'number' &&
+      (m.score === 0 || m.score === 1 || m.score === 2) &&
+      m.meal &&
+      ['desayuno', 'almuerzo', 'merienda', 'cena'].includes(m.meal)
+    ) as NutritionMeal[]
+
+    // Asegurar que haya una comida por cada tipo (puede haber menos de 4 si el usuario no ha llenado todas)
+    const mealTypes = ['desayuno', 'almuerzo', 'merienda', 'cena'] as const
+    const normalizedMeals: NutritionMeal[] = []
+
+    mealTypes.forEach(mealType => {
+      const existingMeal = validMeals.find(m => m.meal === mealType)
+      if (existingMeal) {
+        normalizedMeals.push(existingMeal)
+      }
+    })
+
+    console.log(`[updateNutricion] ${date}: Saving ${normalizedMeals.length} meals:`, normalizedMeals.map(m => `${m.meal}=${m.score}`))
+
     const currentDayHabits = getDayHabits(date)
     const updatedDayHabits = {
       ...currentDayHabits,
-      nutricion: meals,
+      nutricion: normalizedMeals,
     }
     const updatedHabits = {
       ...habits,
@@ -348,7 +382,7 @@ export function HabitsProvider({ children }: { children: ReactNode }) {
 
     if (user) {
       try {
-        await supabase
+        const { error } = await supabase
           .from('day_habits')
           .upsert({
             user_id: user.id,
@@ -357,12 +391,18 @@ export function HabitsProvider({ children }: { children: ReactNode }) {
             movimiento_rutina_completada: updatedDayHabits.movimientoRutinaCompletada || false,
             estudio: updatedDayHabits.estudio || false,
             lectura: updatedDayHabits.lectura || false,
-            nutricion: meals,
+            nutricion: normalizedMeals,
             nutricion_permitido: updatedDayHabits.nutricionPermitido || false,
             custom_habits: updatedDayHabits.customHabits || {},
           }, {
             onConflict: 'user_id,date'
           })
+
+        if (error) {
+          console.error(`[updateNutricion] Error saving to Supabase for ${date}:`, error)
+        } else {
+          console.log(`[updateNutricion] Successfully saved ${normalizedMeals.length} meals for ${date}`)
+        }
       } catch (error) {
         console.error('Error saving nutricion to Supabase:', error)
       }
@@ -411,43 +451,75 @@ export function HabitsProvider({ children }: { children: ReactNode }) {
 
   const getNutritionColor = (date: string): string => {
     const dayHabits = getDayHabits(date)
-    const meals = dayHabits.nutricion
-    
-    if (meals.length !== 4) return 'gray'
-    
+    const meals = dayHabits.nutricion || []
+
+    // Validar que haya exactamente 4 comidas y que todas tengan score válido
+    if (meals.length !== 4) {
+      // Debug: solo loggear si hay comidas pero no son 4
+      if (meals.length > 0) {
+        console.log(`[getNutritionColor] ${date}: Expected 4 meals, got ${meals.length}`, meals)
+      }
+      return 'gray'
+    }
+
+    // Validar que todas las comidas tengan un score válido (0, 1, o 2)
+    const validMeals = meals.filter(m =>
+      m &&
+      typeof m.score === 'number' &&
+      (m.score === 0 || m.score === 1 || m.score === 2) &&
+      m.meal &&
+      ['desayuno', 'almuerzo', 'merienda', 'cena'].includes(m.meal)
+    )
+
+    // Si no todas las comidas son válidas, retornar gray
+    if (validMeals.length !== 4) {
+      console.warn(`[getNutritionColor] Invalid meals for ${date}:`, {
+        total: meals.length,
+        valid: validMeals.length,
+        meals: meals.map(m => ({ meal: m.meal, score: m.score }))
+      })
+      return 'gray'
+    }
+
     // Contar comidas por tipo
-    const sanas = meals.filter(m => m.score === 2).length
-    const regulares = meals.filter(m => m.score === 1).length
-    const malas = meals.filter(m => m.score === 0).length
-    
+    const sanas = validMeals.filter(m => m.score === 2).length
+    const regulares = validMeals.filter(m => m.score === 1).length
+    const malas = validMeals.filter(m => m.score === 0).length
+
+    // Validar que la suma sea 4 (por si acaso)
+    if (sanas + regulares + malas !== 4) {
+      console.warn(`[getNutritionColor] Score sum mismatch for ${date}:`, { sanas, regulares, malas })
+      return 'gray'
+    }
+
     // 4 comidas sano: verde
     if (sanas === 4) return 'green'
-    
+
     // 3 comidas sano y 1 regular: amarillo
     if (sanas === 3 && regulares === 1) return 'yellow'
-    
+
     // 2 comidas sanas y 2 regular: naranja
     if (sanas === 2 && regulares === 2) return 'orange'
-    
+
     // 3 comidas sanas y 1 mala: violeta
     if (sanas === 3 && malas === 1) return 'purple'
-    
+
     // 2 comidas sanas y 2 malas: rojo
     if (sanas === 2 && malas === 2) return 'red'
-    
+
     // 1 comida sana y 3 malas: rojo
     if (sanas === 1 && malas === 3) return 'red'
-    
+
     // 4 comidas malas: rojo
     if (malas === 4) return 'red'
-    
-    // Por defecto rojo
+
+    // Por defecto rojo (casos no cubiertos)
     return 'red'
   }
 
   const addCustomHabit = async (name: string, emoji?: string): Promise<string> => {
     const id = `custom-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-    
+
     // Colores disponibles (excluyendo los usados por hábitos principales)
     // Hábitos principales usan: emerald-500 (movimiento), orange-500 (nutrición), blue-500 (estudio), violet-500 (lectura)
     const availableColors = [
@@ -456,13 +528,13 @@ export function HabitsProvider({ children }: { children: ReactNode }) {
       'emerald-400', 'lime-400', 'amber-400', 'orange-300',
       'red-400', 'slate-400', 'zinc-400', 'stone-400'
     ]
-    
+
     // Obtener colores ya asignados
     const usedColors = customHabitDefinitions.map(h => h.color).filter(Boolean) as string[]
-    
+
     // Encontrar el primer color disponible
     const assignedColor = availableColors.find(color => !usedColors.includes(color)) || availableColors[0]
-    
+
     const newHabit: CustomHabitDefinition = { id, name, emoji, color: assignedColor }
     setCustomHabitDefinitions((prev) => [...prev, newHabit])
 
@@ -488,7 +560,7 @@ export function HabitsProvider({ children }: { children: ReactNode }) {
 
   const removeCustomHabit = async (id: string) => {
     setCustomHabitDefinitions((prev) => prev.filter((h) => h.id !== id))
-    
+
     // Limpiar el hábito de todos los días
     const updatedHabits = { ...habits }
     Object.keys(updatedHabits).forEach((date) => {

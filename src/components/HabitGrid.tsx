@@ -46,7 +46,7 @@ export default function HabitGrid({ habit, customHabit }: HabitGridProps) {
   const daysInMonth = new Date(year, month + 1, 0).getDate()
   let completedCount = 0
   let percentage = 0
-  
+
   if (habit === 'nutricion') {
     // Para nutrición, contar solo días con verde o amarillo
     const goodDays = days.filter(date => {
@@ -198,12 +198,20 @@ export default function HabitGrid({ habit, customHabit }: HabitGridProps) {
               }
             } else if (habit === 'nutricion') {
               const color = getNutritionColor(dateStr)
-              if (habits.nutricion.length === 4) {
+              const mealsCount = habits.nutricion?.length || 0
+
+              // Debug: solo loggear si es el día de hoy o si hay comidas pero no se muestra color
+              if (dateStr === today || (mealsCount > 0 && mealsCount !== 4)) {
+                console.log(`[HabitGrid] ${dateStr}: meals=${mealsCount}, color=${color}`, habits.nutricion)
+              }
+
+              if (mealsCount === 4) {
                 if (color === 'green') cellColorClass = 'bg-green-500 text-white'
                 else if (color === 'yellow') cellColorClass = 'bg-yellow-500 text-white'
                 else if (color === 'orange') cellColorClass = 'bg-orange-500 text-white'
                 else if (color === 'purple') cellColorClass = 'bg-purple-500 text-white'
-                else cellColorClass = 'bg-red-500 text-white'
+                else if (color === 'red') cellColorClass = 'bg-red-500 text-white'
+                // Si color es 'gray', no se aplica ningún color (queda con el color por defecto)
               }
               hasPermitido = habits.nutricionPermitido || false
             } else if (habit === 'movimiento') {
@@ -233,11 +241,9 @@ export default function HabitGrid({ habit, customHabit }: HabitGridProps) {
             <div
               key={day}
               onClick={isCustomHabit ? handleCellClick : undefined}
-              className={`aspect-square rounded-[2px] md:rounded-sm flex items-center justify-center text-[8px] md:text-[9px] transition-colors ${cellColorClass} ${
-                isToday ? 'ring-[1.5px] ring-primary ring-offset-0' : ''
-              } ${
-                hasPermitido ? 'border-2 border-black dark:border-white' : ''
-              } ${isCustomHabit && !isFuture ? 'cursor-pointer hover:opacity-80' : ''}`}
+              className={`aspect-square rounded-[2px] md:rounded-sm flex items-center justify-center text-[8px] md:text-[9px] transition-colors ${cellColorClass} ${isToday ? 'ring-[1.5px] ring-primary ring-offset-0' : ''
+                } ${hasPermitido ? 'border-2 border-black dark:border-white' : ''
+                } ${isCustomHabit && !isFuture ? 'cursor-pointer hover:opacity-80' : ''}`}
               title={`${dateStr} - ${getHabitName()}${hasPermitido ? ' (Permitido)' : ''}`}
             >
               {day}

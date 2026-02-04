@@ -369,7 +369,21 @@ export default function NutritionPage({ onBack, date, onOpenHistory }: Nutrition
 
     await supabase.from('meal_ingredients').delete().eq('meal_id', mealRow.id)
 
-    const ingredientsToSave = form.ingredients
+    // Incluir ingredientes del formulario + si hay texto en manualInput sin añadir, agregarlo también
+    const manualText = (form.manualInput || '').trim()
+    const ingredientsToSave: IngredientWithConfirm[] = [...form.ingredients]
+    if (manualText) {
+      const key = manualText.toLowerCase()
+      if (!ingredientsToSave.some((i) => i.labelEs.toLowerCase() === key)) {
+        ingredientsToSave.push({
+          labelEn: manualText,
+          labelEs: manualText,
+          confirmed: true,
+          addedManually: true,
+        })
+      }
+    }
+
     if (ingredientsToSave.length > 0) {
       const { error: ingError } = await supabase.from('meal_ingredients').insert(
         ingredientsToSave.map((i) => ({
@@ -652,12 +666,12 @@ export default function NutritionPage({ onBack, date, onOpenHistory }: Nutrition
                             : handleHealthScore(mealType, scoreValue)
                         }
                         className={`px-4 py-2 rounded-lg font-medium transition-colors text-sm ${healthLevel === scoreValue
-                            ? scoreValue === 2
-                              ? 'bg-green-500 dark:bg-green-600 text-white'
-                              : scoreValue === 1
-                                ? 'bg-yellow-500 dark:bg-yellow-600 text-white'
-                                : 'bg-red-500 dark:bg-red-600 text-white'
-                            : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                          ? scoreValue === 2
+                            ? 'bg-green-500 dark:bg-green-600 text-white'
+                            : scoreValue === 1
+                              ? 'bg-yellow-500 dark:bg-yellow-600 text-white'
+                              : 'bg-red-500 dark:bg-red-600 text-white'
+                          : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
                           }`}
                         title={saved ? 'Cambiar (Sano/Regular/Mal)' : undefined}
                       >
@@ -721,8 +735,8 @@ export default function NutritionPage({ onBack, date, onOpenHistory }: Nutrition
                             <Star
                               key={n}
                               className={`w-5 h-5 ${n <= saved.star_rating!
-                                  ? 'fill-amber-400 text-amber-400'
-                                  : 'text-gray-300 dark:text-gray-600'
+                                ? 'fill-amber-400 text-amber-400'
+                                : 'text-gray-300 dark:text-gray-600'
                                 }`}
                             />
                           ))}
@@ -793,7 +807,7 @@ export default function NutritionPage({ onBack, date, onOpenHistory }: Nutrition
                               [mealType]: { ...prev[mealType], manualInput: e.target.value },
                             }))
                           }
-                          placeholder={form.isRegistering && !form.segmentedImageUrl ? '¿Qué comiste? (ej: café con leche, tostadas)' : 'Agregar ingrediente a mano'}
+                          placeholder={form.isRegistering && !form.segmentedImageUrl ? '¿Qué comiste? (ej: café con leche, tostadas). Se guarda al dar Guardar.' : 'Escribe un ingrediente y pulsa + para añadirlo'}
                           className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 text-sm"
                         />
                         <button
@@ -814,12 +828,12 @@ export default function NutritionPage({ onBack, date, onOpenHistory }: Nutrition
                             type="button"
                             onClick={() => handleHealthScore(mealType, scoreValue)}
                             className={`px-3 py-2 rounded-lg font-medium text-sm transition-colors ${form.healthLevel === scoreValue
-                                ? scoreValue === 2
-                                  ? 'bg-green-500 dark:bg-green-600 text-white'
-                                  : scoreValue === 1
-                                    ? 'bg-yellow-500 dark:bg-yellow-600 text-white'
-                                    : 'bg-red-500 dark:bg-red-600 text-white'
-                                : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                              ? scoreValue === 2
+                                ? 'bg-green-500 dark:bg-green-600 text-white'
+                                : scoreValue === 1
+                                  ? 'bg-yellow-500 dark:bg-yellow-600 text-white'
+                                  : 'bg-red-500 dark:bg-red-600 text-white'
+                              : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
                               }`}
                           >
                             {SCORE_LABELS[scoreValue]}
@@ -839,8 +853,8 @@ export default function NutritionPage({ onBack, date, onOpenHistory }: Nutrition
                           >
                             <Star
                               className={`w-7 h-7 ${form.starRating != null && n <= form.starRating
-                                  ? 'fill-amber-400 text-amber-400'
-                                  : 'text-gray-300 dark:text-gray-600'
+                                ? 'fill-amber-400 text-amber-400'
+                                : 'text-gray-300 dark:text-gray-600'
                                 }`}
                             />
                           </button>
@@ -922,8 +936,8 @@ function PermitidoToggle({ date }: { date: string }) {
     <button
       onClick={() => updateNutricionPermitido(date, !permitido)}
       className={`px-6 py-3 rounded-lg font-medium ${permitido
-          ? 'bg-yellow-500 dark:bg-yellow-600 text-white'
-          : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+        ? 'bg-yellow-500 dark:bg-yellow-600 text-white'
+        : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
         }`}
     >
       {permitido ? 'Permitido ✓' : 'Marcar Permitido'}
