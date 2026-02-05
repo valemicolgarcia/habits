@@ -214,13 +214,19 @@ def _get_supabase():
     global _supabase_client
     if _supabase_client is not None:
         return _supabase_client
-    if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
+    if not SUPABASE_URL:
+        print("[MLOps] SUPABASE_URL / VITE_SUPABASE_URL no configurada → correcciones en local")
+        return None
+    if not SUPABASE_SERVICE_ROLE_KEY:
+        print("[MLOps] SUPABASE_SERVICE_ROLE_KEY no configurada → correcciones en local")
         return None
     try:
         from supabase import create_client
         _supabase_client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+        print("[MLOps] Cliente Supabase OK → correcciones se guardarán en Supabase")
         return _supabase_client
-    except Exception:
+    except Exception as e:
+        print(f"[MLOps] Error al crear cliente Supabase: {e} → correcciones en local")
         return None
 
 
@@ -497,6 +503,7 @@ async def save_correction(
 
     supabase = _get_supabase()
     if supabase is not None:
+        print("[MLOps] Guardando corrección en Supabase (Storage + tabla)")
         # Guardar en Supabase: Storage + tabla
         storage_path = f"{image_id}.{ext}"
         content_type = file.content_type or "image/jpeg"
@@ -528,6 +535,7 @@ async def save_correction(
         return {"ok": True, "image_id": image_id, "message": "Corrección guardada en Supabase (MLOps)."}
     else:
         # Fallback: guardar en local
+        print("[MLOps] Guardando corrección en local (data/corrections/)")
         _ensure_corrections_dir()
         image_path = CORRECTIONS_IMAGES_DIR / f"{image_id}.{ext}"
         try:
