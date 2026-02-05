@@ -1,6 +1,7 @@
 # API
 fastapi>=0.109.0
 uvicorn[standard]>=0.27.0
+python-dotenv>=1.0.0
 
 # Grounding DINO (vision-language, zero-shot)
 transformers>=4.44.0
@@ -10,3 +11,6 @@ torchvision>=0.15.0
 # Imágenes
 Pillow>=10.0.0
 python-multipart>=0.0.6
+
+# Supabase (MLOps: guardar correcciones)
+supabase>=2.0.0

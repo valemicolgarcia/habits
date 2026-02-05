@@ -17,6 +17,18 @@ export interface DetectionResponse {
   ingredients: DetectedIngredient[]
 }
 
+/** MLOps: ítem corregido por el usuario (label + box opcional para detección). */
+export interface CorrectedIngredientItem {
+  label: string
+  box: number[] | null
+}
+
+/** Payload para enviar una corrección human-in-the-loop. */
+export interface CorrectionPayload {
+  detected: { label: string }[]
+  corrected: CorrectedIngredientItem[]
+}
+
 /**
  * Mapeo inglés -> español para ingredientes del modelo (alineado con backend detection/config.py).
  */
@@ -156,4 +168,38 @@ export async function detectIngredientsImage(
     throw new Error(err.detail || `Error ${res.status}`)
   }
   return res.blob()
+}
+
+/**
+ * MLOps: envía una corrección human-in-the-loop al backend.
+ * Solo se guarda si consent === true.
+ * @param imageFile - Archivo de imagen del plato
+ * @param detected - Ingredientes que devolvió el modelo (solo label)
+ * @param corrected - Ingredientes corregidos por el usuario (label + box opcional)
+ * @param consent - Debe ser true para que el backend persista
+ */
+export async function sendCorrection(
+  imageFile: File,
+  detected: { label: string }[],
+  corrected: CorrectedIngredientItem[],
+  consent: boolean
+): Promise<{ ok: boolean; image_id: string }> {
+  if (!consent) {
+    throw new Error('Se requiere consentimiento para enviar la corrección.')
+  }
+  const formData = new FormData()
+  formData.append('file', imageFile)
+  formData.append('detected_ingredients', JSON.stringify(detected))
+  formData.append('corrected_ingredients', JSON.stringify(corrected))
+  formData.append('consent', consent ? 'true' : 'false')
+
+  const res = await fetch(`${API_BASE}/corrections`, {
+    method: 'POST',
+    body: formData,
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }))
+    throw new Error(err.detail || `Error ${res.status}`)
+  }
+  return res.json()
 }

@@ -115,6 +115,20 @@ Tu web en Vercel va a llamar a esa URL para la detección de ingredientes cuando
 
 ---
 
+## Paso 5b: MLOps: guardar correcciones en Supabase desde el backend (opcional)
+
+Si querés que las correcciones human-in-the-loop (checkbox "Permitir usar esta corrección para mejorar el modelo") se guarden en Supabase cuando los usuarios usen la web en producción:
+
+1. En el **Space de Hugging Face** → **Settings** → **Variables and secrets**.
+2. Agregá estas variables (mismo proyecto Supabase que usa la web):
+   - **SUPABASE_URL** = tu URL (ej. `https://xxxx.supabase.co`); puede ser la misma que `VITE_SUPABASE_URL` del frontend.
+   - **SUPABASE_SERVICE_ROLE_KEY** = la key **secret** del proyecto (Dashboard Supabase → Settings → API → Secret keys → "default").
+3. Guardá. El próximo build del Space usará estas variables y las correcciones se guardarán en Supabase (bucket `mlops-corrections` y tabla `ingredient_corrections`).
+
+Si no configurás esto, las correcciones desde la web no se persisten (el backend en HF no tiene disco persistente para `data/corrections/`).
+
+---
+
 ## Paso 6: Arreglar el deploy de la web en Vercel (errores de build)
 
 Si el deploy en Vercel fallaba por errores de TypeScript en `NutritionPage.tsx`, ya se corrigieron en el repo:

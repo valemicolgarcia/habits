@@ -34,6 +34,7 @@ API FastAPI para detectar **ingredientes visibles en fotos de platos** usando **
 | GET | `/docs` | Documentación Swagger UI |
 | POST | `/detect` | Sube imagen → JSON con ingredientes (label, score, opcional box) |
 | POST | `/detect/image` | Sube imagen → imagen con cajas y etiquetas dibujadas (JPEG) |
+| POST | `/corrections` | MLOps: guarda corrección human-in-the-loop (imagen + detected + corrected + consent) |
 
 ### Parámetros de POST /detect
 
@@ -81,3 +82,20 @@ API en **http://localhost:7860** (docs en http://localhost:7860/docs).
 2. Sube `main.py`, `detection/`, `requirements.txt`, `Dockerfile`, `README.md`.
 3. El Space construirá la imagen y expondrá la API en el puerto 7860.
 4. Opcional: en **Settings → Variables and secrets** puedes definir `GROUNDING_DINO_MODEL_ID`, `GROUNDING_DINO_BOX_THRESHOLD`, `GROUNDING_DINO_TEXT_THRESHOLD`.
+
+## MLOps: guardar correcciones en Supabase
+
+Si configuras **SUPABASE_URL** y **SUPABASE_SERVICE_ROLE_KEY** en el entorno (o en un `.env` dentro de `nutri-ai-backend/`), las correcciones del endpoint **POST /corrections** se guardan en Supabase en lugar del disco local:
+
+- **Storage**: bucket `mlops-corrections` (crear en Dashboard → Storage; nombre configurable con `MLOPS_BUCKET`).
+- **Tabla**: `ingredient_corrections` (ejecutar la migración `supabase/supabase-migration-mlops-corrections.sql` en el SQL Editor de Supabase).
+
+Variables de entorno:
+
+| Variable | Descripción |
+|----------|-------------|
+| `SUPABASE_URL` | URL del proyecto (ej. `https://xxx.supabase.co`) |
+| `SUPABASE_SERVICE_ROLE_KEY` | Service role key (Dashboard → Settings → API) |
+| `MLOPS_BUCKET` | Nombre del bucket de Storage (default: `mlops-corrections`) |
+
+Si no defines estas variables, las correcciones se siguen guardando en `data/corrections/` (local).

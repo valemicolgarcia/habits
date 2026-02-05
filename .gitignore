@@ -47,7 +47,13 @@ rag-service/storage/*
 !rag-service/storage/.gitkeep
 rag-service/.env
 
+# MLOps: correcciones human-in-the-loop (datos locales)
+nutri-ai-backend/data/
+
 # RAG service: índice persistido (se genera al indexar)
 rag-service/storage/*
 !rag-service/storage/.gitkeep
 rag-service/.env
+
+# MLOps: correcciones human-in-the-loop (datos locales)
+nutri-ai-backend/data/

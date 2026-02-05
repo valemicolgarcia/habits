@@ -6,9 +6,21 @@ No usa Roboflow ni modelos entrenados en datasets cerrados.
 from __future__ import annotations
 
 import io
+import json
 import os
+import uuid
+from pathlib import Path
 
-from fastapi import FastAPI, File, UploadFile, HTTPException, Query
+# Cargar .env de nutri-ai-backend/ y de la raíz del repo (donde suele estar VITE_SUPABASE_URL)
+try:
+    from dotenv import load_dotenv
+    _backend_dir = Path(__file__).resolve().parent
+    load_dotenv(_backend_dir / ".env")
+    load_dotenv(_backend_dir.parent / ".env")
+except ImportError:
+    pass
+
+from fastapi import FastAPI, File, Form, UploadFile, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from PIL import Image, ImageDraw, ImageFont
@@ -175,6 +187,53 @@ class DetectedIngredient(BaseModel):
 class DetectionResponse(BaseModel):
     """Lista de ingredientes detectados (solo visibles, sin recetas)."""
     ingredients: list[DetectedIngredient]
+
+
+# MLOps: correcciones human-in-the-loop
+class CorrectedIngredientItem(BaseModel):
+    """Un ingrediente corregido por el usuario (label + box opcional)."""
+    label: str
+    box: list[float] | None = None  # [x0, y0, x1, y1] en coords de imagen original o normalizadas 0-1
+
+
+# Supabase (si está configurado, las correcciones se guardan ahí; si no, en local)
+# Acepta SUPABASE_URL o VITE_SUPABASE_URL (mismo valor que el frontend)
+SUPABASE_URL = (
+    os.environ.get("SUPABASE_URL", "").strip()
+    or os.environ.get("VITE_SUPABASE_URL", "").strip()
+)
+# La key debe ser SERVICE_ROLE (no anon): el backend escribe en Storage y en ingredient_corrections
+SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+MLOPS_BUCKET = os.environ.get("MLOPS_BUCKET", "mlops-corrections")
+
+_supabase_client = None
+
+
+def _get_supabase():
+    """Cliente Supabase solo si hay URL y key (backend usa service_role)."""
+    global _supabase_client
+    if _supabase_client is not None:
+        return _supabase_client
+    if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
+        return None
+    try:
+        from supabase import create_client
+        _supabase_client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+        return _supabase_client
+    except Exception:
+        return None
+
+
+# Directorio local (fallback si no hay Supabase)
+CORRECTIONS_DIR = Path(os.environ.get("MLOPS_CORRECTIONS_DIR", "data/corrections"))
+CORRECTIONS_IMAGES_DIR = CORRECTIONS_DIR / "images"
+CORRECTIONS_ANNOTATIONS_FILE = CORRECTIONS_DIR / "annotations.jsonl"
+
+
+def _ensure_corrections_dir() -> None:
+    CORRECTIONS_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+    if not CORRECTIONS_ANNOTATIONS_FILE.exists():
+        CORRECTIONS_ANNOTATIONS_FILE.touch()
 
 
 ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp", "image/bmp"}
@@ -376,3 +435,115 @@ async def detect_ingredients_image(
     img_with_boxes.save(buf, format="JPEG", quality=90)
     buf.seek(0)
     return Response(content=buf.getvalue(), media_type="image/jpeg")
+
+
+@app.post("/corrections")
+async def save_correction(
+    file: UploadFile = File(..., description="Imagen del plato"),
+    detected_ingredients: str = Form(..., description="JSON array: [{ \"label\": \"...\" }]"),
+    corrected_ingredients: str = Form(..., description="JSON array: [{ \"label\": \"...\", \"box\": [x0,y0,x1,y1] | null }]"),
+    consent: str = Form(..., description="Debe ser 'true' para guardar"),
+):
+    """
+    MLOps: guarda una corrección human-in-the-loop.
+    Solo se persiste si consent === 'true'.
+    Si SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY están configurados, guarda en Supabase
+    (Storage bucket mlops-corrections + tabla ingredient_corrections).
+    Si no, guarda en data/corrections/ (local).
+    """
+    if consent.lower() != "true":
+        raise HTTPException(status_code=400, detail="Se requiere consentimiento (consent=true) para guardar la corrección.")
+
+    if file.content_type and file.content_type not in ALLOWED_CONTENT_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Archivo no válido: se requiere una imagen. Recibido: {file.content_type}",
+        )
+    try:
+        contents = await file.read()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error al leer el archivo: {str(e)}")
+    if not contents:
+        raise HTTPException(status_code=400, detail="El archivo está vacío.")
+
+    try:
+        detected = json.loads(detected_ingredients)
+        corrected = json.loads(corrected_ingredients)
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=400, detail=f"JSON inválido en detected_ingredients o corrected_ingredients: {e}")
+
+    if not isinstance(detected, list) or not isinstance(corrected, list):
+        raise HTTPException(status_code=400, detail="detected_ingredients y corrected_ingredients deben ser arrays JSON.")
+
+    # Normalizar: cada ítem de corrected con label y box opcional
+    corrected_normalized: list[dict] = []
+    for item in corrected:
+        if isinstance(item, dict) and "label" in item:
+            corrected_normalized.append({
+                "label": str(item["label"]).strip(),
+                "box": item.get("box") if isinstance(item.get("box"), list) and len(item.get("box", [])) == 4 else None,
+            })
+        else:
+            raise HTTPException(status_code=400, detail="Cada ítem de corrected_ingredients debe tener al menos { \"label\": \"...\" }.")
+
+    detected_normalized = [{"label": str(d.get("label", "")).strip()} for d in detected if isinstance(d, dict)]
+
+    image_id = str(uuid.uuid4())
+    ext = "jpg"
+    if file.filename and "." in file.filename:
+        ext = file.filename.rsplit(".", 1)[-1].lower()
+    if ext not in ("jpg", "jpeg", "png", "webp", "bmp"):
+        ext = "jpg"
+
+    supabase = _get_supabase()
+    if supabase is not None:
+        # Guardar en Supabase: Storage + tabla
+        storage_path = f"{image_id}.{ext}"
+        content_type = file.content_type or "image/jpeg"
+        try:
+            supabase.storage.from_(MLOPS_BUCKET).upload(
+                path=storage_path,
+                file=contents,
+                file_options={"content-type": content_type},
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error al subir la imagen a Supabase Storage: {e}. ¿Creaste el bucket '{MLOPS_BUCKET}' en Storage?",
+            )
+        image_path = f"{MLOPS_BUCKET}/{storage_path}"
+        try:
+            supabase.table("ingredient_corrections").insert({
+                "image_id": image_id,
+                "image_path": image_path,
+                "detected_ingredients": detected_normalized,
+                "corrected_ingredients": corrected_normalized,
+                "consent": True,
+            }).execute()
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error al guardar la anotación en Supabase: {e}. ¿Ejecutaste la migración supabase-migration-mlops-corrections.sql?",
+            )
+        return {"ok": True, "image_id": image_id, "message": "Corrección guardada en Supabase (MLOps)."}
+    else:
+        # Fallback: guardar en local
+        _ensure_corrections_dir()
+        image_path = CORRECTIONS_IMAGES_DIR / f"{image_id}.{ext}"
+        try:
+            image_path.write_bytes(contents)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error al guardar la imagen: {e}")
+        record = {
+            "image_id": image_id,
+            "image_path": str(image_path),
+            "detected": detected_normalized,
+            "corrected": corrected_normalized,
+            "consent": True,
+        }
+        try:
+            with open(CORRECTIONS_ANNOTATIONS_FILE, "a", encoding="utf-8") as f:
+                f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error al guardar la anotación: {e}")
+        return {"ok": True, "image_id": image_id, "message": "Corrección guardada para MLOps (local)."}

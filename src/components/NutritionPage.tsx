@@ -7,7 +7,9 @@ import {
   detectIngredients,
   detectIngredientsImage,
   translateIngredient,
+  sendCorrection,
 } from '../lib/nutriApi'
+import { IngredientBoxEditor } from './IngredientBoxEditor'
 import {
   processLabel,
   type NutritionalResponse,
@@ -38,18 +40,22 @@ interface IngredientWithConfirm {
   labelEs: string
   confirmed: boolean
   addedManually: boolean
+  /** MLOps: caja [x0,y0,x1,y1] en coords de imagen original; null si solo lista. */
+  box: number[] | null
 }
 
 interface MealFormState {
   file: File | null
   segmentedImageUrl: string | null
   ingredients: IngredientWithConfirm[]
+  /** MLOps: ingredientes tal como los devolvió el modelo (solo label) para enviar corrección. */
+  detectedIngredientsForMlops: { label: string }[] | null
   manualInput: string
   healthLevel: 0 | 1 | 2 | null
   starRating: number | null
   loading: boolean
   error: string | null
-  isRegistering: boolean // true = usuario hizo clic en "Registrar comida" (puede anotar a mano sin foto)
+  isRegistering: boolean
 }
 
 const BUCKET_MEAL_IMAGES = 'meal-images'
@@ -72,6 +78,7 @@ export default function NutritionPage({ onBack, date, onOpenHistory }: Nutrition
     file: null,
     segmentedImageUrl: null,
     ingredients: [],
+    detectedIngredientsForMlops: null,
     manualInput: '',
     healthLevel: null,
     starRating: null,
@@ -97,6 +104,18 @@ export default function NutritionPage({ onBack, date, onOpenHistory }: Nutrition
   const [analyzingLabel, setAnalyzingLabel] = useState(false)
   const [labelError, setLabelError] = useState<string | null>(null)
   const labelFileInputRef = useRef<HTMLInputElement>(null)
+  const [mlopsConsent, setMlopsConsent] = useState<Record<MealType, boolean>>({
+    desayuno: false,
+    almuerzo: false,
+    merienda: false,
+    cena: false,
+  })
+  const [drawModeForIndex, setDrawModeForIndex] = useState<Record<MealType, number | null>>({
+    desayuno: null,
+    almuerzo: null,
+    merienda: null,
+    cena: null,
+  })
 
   // Cargar comidas guardadas para la fecha seleccionada
   useEffect(() => {
@@ -224,7 +243,10 @@ export default function NutritionPage({ onBack, date, onOpenHistory }: Nutrition
           labelEs: translateIngredient(d.label),
           confirmed: true,
           addedManually: false,
+          box: d.box ?? null,
         }))
+
+      const detectedForMlops = detection.ingredients.map((d) => ({ label: d.label }))
 
       setForms((prev) => ({
         ...prev,
@@ -233,6 +255,7 @@ export default function NutritionPage({ onBack, date, onOpenHistory }: Nutrition
           loading: false,
           segmentedImageUrl: segmentedUrl,
           ingredients,
+          detectedIngredientsForMlops: detectedForMlops,
           error: null,
         },
       }))
@@ -270,7 +293,7 @@ export default function NutritionPage({ onBack, date, onOpenHistory }: Nutrition
         ...prev[mealType],
         ingredients: [
           ...prev[mealType].ingredients,
-          { labelEn: name, labelEs: name, confirmed: true, addedManually: true },
+          { labelEn: name, labelEs: name, confirmed: true, addedManually: true, box: null },
         ],
         manualInput: '',
       },
@@ -380,6 +403,7 @@ export default function NutritionPage({ onBack, date, onOpenHistory }: Nutrition
           labelEs: manualText,
           confirmed: true,
           addedManually: true,
+          box: null,
         })
       }
     }
@@ -431,12 +455,20 @@ export default function NutritionPage({ onBack, date, onOpenHistory }: Nutrition
       ].sort((a, b) => MEAL_TYPES.indexOf(a.meal_type) - MEAL_TYPES.indexOf(b.meal_type))
     })
 
+    if (form.file && form.detectedIngredientsForMlops && mlopsConsent[mealType]) {
+      const corrected = form.ingredients.map((ing) => ({ label: ing.labelEn, box: ing.box }))
+      sendCorrection(form.file, form.detectedIngredientsForMlops, corrected, true).catch(() => {
+        // No bloquear guardado; la corrección MLOps es opcional
+      })
+    }
+
     setForms((prev) => ({
       ...prev,
       [mealType]: {
         file: null,
         segmentedImageUrl: null,
         ingredients: [],
+        detectedIngredientsForMlops: null,
         manualInput: '',
         healthLevel: null,
         starRating: null,
@@ -445,6 +477,8 @@ export default function NutritionPage({ onBack, date, onOpenHistory }: Nutrition
         isRegistering: false,
       },
     }))
+    setMlopsConsent((prev) => ({ ...prev, [mealType]: false }))
+    setDrawModeForIndex((prev) => ({ ...prev, [mealType]: null }))
     if (form.segmentedImageUrl) URL.revokeObjectURL(form.segmentedImageUrl)
     setSaveLoading(null)
     setSaveSuccess(mealType)
@@ -762,24 +796,50 @@ export default function NutritionPage({ onBack, date, onOpenHistory }: Nutrition
                           </button>
                         </div>
                       )}
-                      {form.segmentedImageUrl && (
+                      {form.segmentedImageUrl && form.ingredients.length > 0 ? (
+                        <div className="mt-3 mb-3">
+                          <IngredientBoxEditor
+                            imageUrl={form.segmentedImageUrl}
+                            ingredients={form.ingredients}
+                            onIngredientsChange={(next) =>
+                              setForms((prev) => ({
+                                ...prev,
+                                [mealType]: { ...prev[mealType], ingredients: next },
+                              }))
+                            }
+                            drawModeForIndex={drawModeForIndex[mealType]}
+                            onDrawModeCancel={() => setDrawModeForIndex((p) => ({ ...p, [mealType]: null }))}
+                            className="mt-3 mb-3"
+                          />
+                        </div>
+                      ) : form.segmentedImageUrl ? (
                         <img
                           src={form.segmentedImageUrl}
                           alt="Segmentación"
                           className="w-full rounded-lg object-cover max-h-56 mt-3 mb-3"
                         />
-                      )}
+                      ) : null}
                       {form.segmentedImageUrl && form.ingredients.length > 0 ? (
                         <>
                           <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                            ¿Comiste estos alimentos? (Sí / No). Elimina el que no corresponda para mejorar futuras respuestas.
+                            ¿Comiste estos alimentos? (Sí / No). Elimina el que no corresponda. Opcional: marca en la imagen dónde está cada uno (para mejorar el modelo).
                           </p>
                           <ul className="space-y-2 mb-3">
                             {form.ingredients.map((ing, i) => (
-                              <li key={i} className="flex items-center gap-2">
-                                <span className="flex-1 text-gray-800 dark:text-gray-200 text-sm">
+                              <li key={i} className="flex items-center gap-2 flex-wrap">
+                                <span className="flex-1 min-w-0 text-gray-800 dark:text-gray-200 text-sm">
                                   {ing.labelEs}
                                 </span>
+                                {ing.box == null ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => setDrawModeForIndex((p) => ({ ...p, [mealType]: drawModeForIndex[mealType] === i ? null : i }))}
+                                    className={`text-xs px-2 py-1 rounded border transition-colors ${drawModeForIndex[mealType] === i ? 'bg-amber-100 dark:bg-amber-900/40 border-amber-500' : 'bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600'}`}
+                                    title="Dibuja en la imagen dónde está este ingrediente"
+                                  >
+                                    {drawModeForIndex[mealType] === i ? 'Dibuja el rectángulo…' : 'Marcar en imagen'}
+                                  </button>
+                                ) : null}
                                 <button
                                   type="button"
                                   onClick={() => removeIngredient(mealType, i)}
@@ -791,6 +851,17 @@ export default function NutritionPage({ onBack, date, onOpenHistory }: Nutrition
                               </li>
                             ))}
                           </ul>
+                          <label className="flex items-center gap-2 mb-3 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={mlopsConsent[mealType]}
+                              onChange={(e) => setMlopsConsent((p) => ({ ...p, [mealType]: e.target.checked }))}
+                              className="rounded border-gray-300 dark:border-gray-600"
+                            />
+                            <span className="text-sm text-gray-700 dark:text-gray-300">
+                              Permitir usar esta corrección para mejorar el modelo (MLOps)
+                            </span>
+                          </label>
                         </>
                       ) : form.segmentedImageUrl ? (
                         <p className="text-sm text-amber-600 dark:text-amber-400 mb-3">
